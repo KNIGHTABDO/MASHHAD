@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0A0A0A;
+  --bg-secondary: #141414;
+  --bg-tertiary: #1F1F1F;
+  --bg-hover: #2A2A2A;
+  --accent-primary: #E50914;
+  --accent-gold: #F5A623;
+  --accent-blue: #0071E3;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B3B3B3;
+  --text-muted: #666666;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-visible: rgba(255, 255, 255, 0.15);
+  --text-display: clamp(2.5rem, 5vw, 5rem);
+  --text-h1: clamp(1.75rem, 3vw, 2.5rem);
+  --text-h2: clamp(1.25rem, 2.5vw, 1.75rem);
+  --text-h3: 1.25rem;
+  --text-body: 1rem;
+  --text-small: 0.875rem;
+  --text-xs: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+[lang="ar"] {
+  line-height: 1.8;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Gradient overlay utility */
+.gradient-to-top {
+  background: linear-gradient(to top, var(--bg-primary) 0%, transparent 100%);
+}
+
+.gradient-to-right {
+  background: linear-gradient(to right, var(--bg-primary) 0%, transparent 100%);
+}
+
+/* Card shimmer skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(20, 20, 20, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* RTL-aware spacing */
+[dir="rtl"] .space-x-reverse > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(229, 9, 20, 0.3);
+  color: white;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hero gradient */
+.hero-gradient {
+  background: linear-gradient(
+    to top,
+    var(--bg-primary) 0%,
+    rgba(10, 10, 10, 0.6) 40%,
+    rgba(10, 10, 10, 0.1) 70%,
+    transparent 100%
+  );
+}
+
+/* Number text for top 10 */
+.number-overlay {
+  font-size: clamp(5rem, 12vw, 9rem);
+  font-weight: 900;
+  line-height: 1;
+  -webkit-text-stroke: 2px rgba(255,255,255,0.15);
+  color: transparent;
+  user-select: none;
+}
