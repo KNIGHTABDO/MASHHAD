@@ -9,6 +9,8 @@ export interface Subtitle {
   url?: string
   communityScore?: number
   recommendedOffsetMs?: number
+  syncScore?: number
+  source?: string
 }
 
 export interface SubtitleVote {

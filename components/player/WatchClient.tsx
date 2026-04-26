@@ -194,21 +194,25 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     async function fetchSubs() {
       setSubsLoading(true)
       try {
+        // Extract the current stream filename for subtitle-to-stream matching
+        const cs = streams[currentStreamIndex]
+        const streamFile = cs?.url ? decodeURIComponent(cs.url.split('/').pop() || '') : ''
+
         const params = new URLSearchParams({
           tmdbId: contentId,
           type: type === 'movie' ? 'movie' : 'episode',
           language: 'ar',
           ...(season && { season: season.toString() }),
           ...(episode && { episode: episode.toString() }),
+          ...(streamFile && { streamFile }),
         })
         const res = await fetch(`/api/subtitles/search?${params}`)
         const data = await res.json()
         if (data.subtitles?.length > 0) {
-          // Sort by download count (community ranking proxy)
-          const sorted = [...data.subtitles].sort((a: Subtitle, b: Subtitle) => b.downloadCount - a.downloadCount)
-          setSubtitles(sorted)
-          // Auto-select top-ranked subtitle
-          loadSubtitle(sorted[0])
+          // API returns pre-ranked by syncScore (best lip-sync match first)
+          setSubtitles(data.subtitles)
+          // Auto-select the top-ranked subtitle
+          loadSubtitle(data.subtitles[0])
         }
       } catch (err) {
         console.error('[Subtitles fetch]', err)
@@ -218,7 +222,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     }
     fetchSubs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentId, type, season, episode])
+  }, [contentId, type, season, episode, streams, currentStreamIndex])
 
   // --- Load a subtitle into the video track ---
   async function loadSubtitle(sub: Subtitle) {
