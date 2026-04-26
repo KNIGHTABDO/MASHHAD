@@ -102,13 +102,21 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
 
   const { volume, setVolume, playbackRate, setPlaybackRate } = usePlayerStore()
 
+  // Track the absolute progress to keep it synced across stream/server changes
+  const lastKnownTime = useRef(initialProgress || 0)
+  const previousStreamIndex = useRef(currentStreamIndex)
+
   // --- Supabase sync ---
-  const syncProgress = useCallback(async (time?: number) => {
+  const syncProgress = useCallback(async (time?: number, embedDuration?: number) => {
     if (!profileId) return
+    const isEmbed = streams[currentStreamIndex]?.type === 'embed'
     const video = videoRef.current
-    if (!video) return
-    const prog = time ?? Math.floor(video.currentTime)
-    const dur = Math.floor(video.duration) || 0
+    
+    if (!video && !isEmbed) return
+
+    const prog = time ?? (video ? Math.floor(video.currentTime) : 0)
+    const dur = embedDuration ?? (video ? Math.floor(video.duration) : 0)
+    
     if (prog < 2) return
 
     const supabase = createClient()
@@ -117,7 +125,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       content_id: contentId,
       content_type: type === 'tv' ? 'episode' : 'movie',
       progress_seconds: prog,
-      duration_seconds: dur,
+      duration_seconds: dur || 0,
       completed: dur > 0 && prog >= dur - 120,
       watched_at: new Date().toISOString(),
     }
@@ -141,7 +149,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     } else {
       await supabase.from('watch_history').insert(row)
     }
-  }, [profileId, contentId, type, season, episode])
+  }, [profileId, contentId, type, season, episode, streams, currentStreamIndex])
 
   // Start sync interval
   useEffect(() => {
@@ -157,7 +165,9 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       if (event.data?.type === 'MEDIA_DATA') {
         const mediaData = event.data.data;
         if (mediaData && mediaData.progress && typeof mediaData.progress.watched === 'number') {
-           syncProgress(mediaData.progress.watched);
+           const duration = mediaData.progress.duration || mediaData.progress.total || 0;
+           syncProgress(mediaData.progress.watched, duration);
+           lastKnownTime.current = mediaData.progress.watched;
         }
       }
     };
@@ -343,19 +353,27 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streams, currentStreamIndex])
 
+  // --- Cross-Server stream switching sync ---
+  useEffect(() => {
+    if (previousStreamIndex.current !== currentStreamIndex) {
+      previousStreamIndex.current = currentStreamIndex
+      hasResumed.current = false // Allow seeking to lastKnownTime on new stream
+    }
+  }, [currentStreamIndex])
+
   // --- Resume playback ---
   useEffect(() => {
     const video = videoRef.current
-    if (!video || hasResumed.current || !initialProgress) return
+    if (!video) return
     const onReady = () => {
-      if (!hasResumed.current && initialProgress > 0) {
-        video.currentTime = initialProgress
+      if (!hasResumed.current && lastKnownTime.current > 0) {
+        video.currentTime = lastKnownTime.current
         hasResumed.current = true
       }
     }
     video.addEventListener('canplay', onReady)
     return () => video.removeEventListener('canplay', onReady)
-  }, [initialProgress])
+  }, [currentStreamIndex])
 
   // --- Time tracking ---
   useEffect(() => {
@@ -364,6 +382,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     const onTime = () => { 
       if (!isSeeking) {
         setCurrentTime(video.currentTime)
+        if (video.currentTime > 0) lastKnownTime.current = video.currentTime
         
         // Check segments
         if (segments?.intro) {
@@ -505,6 +524,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
           className="absolute inset-0 w-full h-full border-0 bg-black z-10"
           allowFullScreen
           referrerPolicy="origin"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
         />
       ) : (
         <video ref={videoRef} className="w-full h-full object-contain bg-black" onError={tryNextStream} playsInline controls={false}>
