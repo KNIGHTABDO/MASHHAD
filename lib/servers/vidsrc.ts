@@ -6,9 +6,9 @@ export const vidsrcAdapter: ServerAdapter = {
     // Generate the embed URL based on the content type
     let url = ''
     if (type === 'movie') {
-      url = `https://vsrc.su/embed/movie?tmdb=${tmdbId}`
+      url = `https://vidsrc.net/embed/movie?tmdb=${tmdbId}`
     } else {
-      url = `https://vsrc.su/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`
+      url = `https://vidsrc.net/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`
     }
 
     // Since this is an embed, we only return one option
