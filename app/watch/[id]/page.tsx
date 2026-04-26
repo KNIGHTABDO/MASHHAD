@@ -43,7 +43,7 @@ export default async function WatchPage({ params, searchParams }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="h-screen w-screen bg-black overflow-hidden flex flex-col">
       <Suspense fallback={
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
