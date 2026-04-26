@@ -20,23 +20,58 @@ export function PostPlaybackScreen({ type, seriesId, currentSeason, currentEpiso
   const router = useRouter()
   const [countdown, setCountdown] = useState(10)
   const [recommendations, setRecommendations] = useState<any[]>([])
+  const [nextEpisodeData, setNextEpisodeData] = useState<{ season: number, episode: number } | null>(null)
+  const [isLoadingNext, setIsLoadingNext] = useState(type === 'tv')
   
+  // Check if next episode exists
+  useEffect(() => {
+    if (type !== 'tv') return
+    async function checkNext() {
+      try {
+        const nextEp = (currentEpisode || 1) + 1
+        const res = await fetch(`/api/tmdb/tv/${seriesId}/season/${currentSeason}/episode/${nextEp}`)
+        const data = await res.json()
+        if (data && data.id) {
+          setNextEpisodeData({ season: currentSeason!, episode: nextEp })
+          setIsLoadingNext(false)
+          return
+        }
+        
+        const nextSeason = (currentSeason || 1) + 1
+        const res2 = await fetch(`/api/tmdb/tv/${seriesId}/season/${nextSeason}/episode/1`)
+        const data2 = await res2.json()
+        if (data2 && data2.id) {
+          setNextEpisodeData({ season: nextSeason, episode: 1 })
+          setIsLoadingNext(false)
+          return
+        }
+        
+        setNextEpisodeData(null)
+      } catch {
+        setNextEpisodeData(null)
+      } finally {
+        setIsLoadingNext(false)
+      }
+    }
+    checkNext()
+  }, [type, seriesId, currentSeason, currentEpisode])
+
   // Auto play next episode countdown
   useEffect(() => {
-    if (type !== 'tv' || !autoPlayNext) return
+    if (type !== 'tv' || !autoPlayNext || isLoadingNext || !nextEpisodeData) return
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
           clearInterval(timer)
           // Navigate to next episode
-          router.push(`/watch/${seriesId}?type=tv&season=${currentSeason}&episode=${(currentEpisode || 1) + 1}`)
+          router.push(`/watch/${seriesId}?type=tv&season=${nextEpisodeData.season}&episode=${nextEpisodeData.episode}`)
           return 0
         }
         return prev - 1
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [type, autoPlayNext, seriesId, currentSeason, currentEpisode, router])
+  }, [type, autoPlayNext, seriesId, router, isLoadingNext, nextEpisodeData])
 
   // Fetch recommendations
   useEffect(() => {
@@ -55,30 +90,40 @@ export function PostPlaybackScreen({ type, seriesId, currentSeason, currentEpiso
   }, [type, seriesId])
 
   if (type === 'tv') {
-    return (
-      <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
-        <h2 className="text-4xl font-black text-white mb-4">
-          {lang === 'ar' ? 'الحلقة القادمة' : 'Next Episode'}
-        </h2>
-        <p className="text-[#B3B3B3] mb-8">
-          {lang === 'ar' ? 'ستبدأ الحلقة التالية تلقائياً خلال' : 'Next episode starting in'} {countdown} {lang === 'ar' ? 'ثواني' : 'seconds'}
-        </p>
-        <div className="flex gap-4">
-          <button 
-            onClick={() => router.push(`/watch/${seriesId}?type=tv&season=${currentSeason}&episode=${(currentEpisode || 1) + 1}`)}
-            className="bg-white text-black font-bold px-8 py-3 rounded-xl hover:bg-white/90 transition-all hover:scale-105"
-          >
-            {lang === 'ar' ? 'تشغيل الآن' : 'Play Now'}
-          </button>
-          <button 
-            onClick={() => router.push('/')}
-            className="bg-[#333] text-white font-bold px-8 py-3 rounded-xl hover:bg-[#444] transition-all"
-          >
-            {lang === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}
-          </button>
+    if (isLoadingNext) {
+      return (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center animate-in fade-in duration-500">
+          <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin" />
         </div>
-      </div>
-    )
+      )
+    }
+
+    if (nextEpisodeData) {
+      return (
+        <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+          <h2 className="text-4xl font-black text-white mb-4">
+            {lang === 'ar' ? 'الحلقة القادمة' : 'Next Episode'}
+          </h2>
+          <p className="text-[#B3B3B3] mb-8">
+            {lang === 'ar' ? 'ستبدأ الحلقة التالية تلقائياً خلال' : 'Next episode starting in'} {countdown} {lang === 'ar' ? 'ثواني' : 'seconds'}
+          </p>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => router.push(`/watch/${seriesId}?type=tv&season=${nextEpisodeData.season}&episode=${nextEpisodeData.episode}`)}
+              className="bg-white text-black font-bold px-8 py-3 rounded-xl hover:bg-white/90 transition-all hover:scale-105"
+            >
+              {lang === 'ar' ? 'تشغيل الآن' : 'Play Now'}
+            </button>
+            <button 
+              onClick={() => router.push('/')}
+              className="bg-[#333] text-white font-bold px-8 py-3 rounded-xl hover:bg-[#444] transition-all"
+            >
+              {lang === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}
+            </button>
+          </div>
+        </div>
+      )
+    }
   }
 
   // Movie or final episode screen

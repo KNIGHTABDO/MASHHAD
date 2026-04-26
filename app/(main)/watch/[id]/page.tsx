@@ -53,6 +53,7 @@ export default async function WatchPage({ params, searchParams }: Props) {
         </div>
       }>
         <WatchClient
+          key={`${id}-${type}-${season || ''}-${episode || ''}`}
           contentId={id}
           type={type as 'movie' | 'tv'}
           season={season ? parseInt(season) : undefined}
