@@ -2,9 +2,11 @@ import type { StreamResult, ServerAdapter } from '@/types/stream'
 import { fasselhdAdapter } from './fasselhd'
 import { vidbomAdapter, doodstreamAdapter, streamwishAdapter, filemoonAdapter } from './vidbom'
 import { realDebridAdapter } from './realdebrid'
+import { vidsrcAdapter } from './vidsrc'
 
 const ADAPTERS: ServerAdapter[] = [
   realDebridAdapter,   // Best quality — first
+  vidsrcAdapter,       // Embed alternative
   fasselhdAdapter,
   vidbomAdapter,
   doodstreamAdapter,

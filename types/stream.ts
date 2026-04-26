@@ -2,7 +2,7 @@ export interface StreamResult {
   url: string
   quality?: string
   server: string
-  type: 'hls' | 'mp4' | 'dash'
+  type: 'hls' | 'mp4' | 'dash' | 'embed'
   isRealDebrid: boolean
   label?: string
 }

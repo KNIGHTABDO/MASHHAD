@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: 'مشهد — منصة المحتوى العربي',
   description: 'شاهد أحدث الأفلام والمسلسلات العربية والعالمية بجودة عالية على مشهد.',
   keywords: ['أفلام', 'مسلسلات', 'عربي', 'بث مباشر', 'مشهد'],
+  referrer: 'origin',
 }
 
 export default function RootLayout({

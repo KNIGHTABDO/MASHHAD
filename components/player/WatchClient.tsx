@@ -151,6 +151,20 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     return () => { if (syncTimer.current) clearInterval(syncTimer.current) }
   }, [syncProgress])
 
+  // --- VidSrc postMessage progress tracking ---
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'MEDIA_DATA') {
+        const mediaData = event.data.data;
+        if (mediaData && mediaData.progress && typeof mediaData.progress.watched === 'number') {
+           syncProgress(mediaData.progress.watched);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [syncProgress]);
+
   // Fetch IntroDB segments
   useEffect(() => {
     if (type !== 'tv') return
@@ -482,10 +496,19 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
         </div>
       )}
 
-      {/* Video */}
-      <video ref={videoRef} className="w-full h-full object-contain bg-black" onError={tryNextStream} playsInline controls={false}>
-        <track ref={trackRef} kind="subtitles" default />
-      </video>
+      {/* Video or Embed */}
+      {cs?.type === 'embed' ? (
+        <iframe 
+          src={cs.url} 
+          className="w-full h-full border-0 bg-black relative z-10"
+          allowFullScreen
+          referrerPolicy="origin"
+        />
+      ) : (
+        <video ref={videoRef} className="w-full h-full object-contain bg-black" onError={tryNextStream} playsInline controls={false}>
+          <track ref={trackRef} kind="subtitles" default />
+        </video>
+      )}
 
       {/* Post Playback Screen */}
       {isEnded && (
@@ -540,48 +563,50 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
               <div className="flex-1" />
-              {/* Subtitle selector */}
-              <div className="relative">
-                <button
-                  onClick={() => { setSubtitleMenuOpen(s => !s); setServerMenuOpen(false) }}
-                  className={`px-4 py-2 rounded-full backdrop-blur-md text-sm hover:bg-white/20 transition-all flex items-center gap-2 ${activeSub ? 'bg-[#E50914]/30 text-white' : 'bg-white/10 text-white'}`}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 12h4m-2 3h6"/></svg>
-                  {activeSub ? 'العربية' : t.player.noSubtitles}
-                </button>
-                <AnimatePresence>
-                  {subtitleMenuOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                      className="absolute right-0 top-12 w-72 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10 max-h-80 overflow-y-auto"
-                    >
-                      <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">الترجمة</div>
-                      <button
-                        onClick={() => { disableSubtitles(); setSubtitleMenuOpen(false) }}
-                        className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center gap-2 ${!activeSub ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+              {/* Subtitle selector (hide for embed) */}
+              {cs?.type !== 'embed' && (
+                <div className="relative">
+                  <button
+                    onClick={() => { setSubtitleMenuOpen(s => !s); setServerMenuOpen(false) }}
+                    className={`px-4 py-2 rounded-full backdrop-blur-md text-sm hover:bg-white/20 transition-all flex items-center gap-2 ${activeSub ? 'bg-[#E50914]/30 text-white' : 'bg-white/10 text-white'}`}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 12h4m-2 3h6"/></svg>
+                    {activeSub ? 'العربية' : t.player.noSubtitles}
+                  </button>
+                  <AnimatePresence>
+                    {subtitleMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                        className="absolute right-0 top-12 w-72 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10 max-h-80 overflow-y-auto"
                       >
-                        {!activeSub && <span className="w-2 h-2 rounded-full bg-[#E50914]" />}
-                        بدون ترجمة
-                      </button>
-                      {subsLoading && <div className="px-4 py-3 text-sm text-[#666]">جاري البحث...</div>}
-                      {subtitles.map((s, i) => (
+                        <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">الترجمة</div>
                         <button
-                          key={s.fileId}
-                          onClick={() => { loadSubtitle(s); setSubtitleMenuOpen(false) }}
-                          className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center justify-between gap-2 ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                          onClick={() => { disableSubtitles(); setSubtitleMenuOpen(false) }}
+                          className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center gap-2 ${!activeSub ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
                         >
-                          <span className="flex items-center gap-2 min-w-0">
-                            {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
-                            <span className="truncate">{s.uploaderName}</span>
-                            {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">★ الأفضل</span>}
-                          </span>
-                          <span className="text-xs text-[#666] flex-shrink-0">⬇ {s.downloadCount}</span>
+                          {!activeSub && <span className="w-2 h-2 rounded-full bg-[#E50914]" />}
+                          بدون ترجمة
                         </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                        {subsLoading && <div className="px-4 py-3 text-sm text-[#666]">جاري البحث...</div>}
+                        {subtitles.map((s, i) => (
+                          <button
+                            key={s.fileId}
+                            onClick={() => { loadSubtitle(s); setSubtitleMenuOpen(false) }}
+                            className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center justify-between gap-2 ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
+                              <span className="truncate">{s.uploaderName}</span>
+                              {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">★ الأفضل</span>}
+                            </span>
+                            <span className="text-xs text-[#666] flex-shrink-0">⬇ {s.downloadCount}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
               {/* Server selector */}
               <div className="relative">
                 <button
@@ -620,115 +645,119 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
             </div>
 
             {/* Center play/pause */}
-            <div className="flex-1 flex items-center justify-center" onClick={safeToggle}>
-              <motion.div whileTap={{ scale: 0.85 }} className="w-20 h-20 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center cursor-pointer hover:bg-black/60 transition-all">
-                {isPlaying ? (
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-                ) : (
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><polygon points="6,4 20,12 6,20"/></svg>
-                )}
-              </motion.div>
-            </div>
+            {cs?.type !== 'embed' && (
+              <div className="flex-1 flex items-center justify-center" onClick={safeToggle}>
+                <motion.div whileTap={{ scale: 0.85 }} className="w-20 h-20 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center cursor-pointer hover:bg-black/60 transition-all">
+                  {isPlaying ? (
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                  ) : (
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="white"><polygon points="6,4 20,12 6,20"/></svg>
+                  )}
+                </motion.div>
+              </div>
+            )}
 
             {/* Bottom controls */}
-            <div className="bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-16">
-              {/* Progress bar */}
-              <div className="group relative mb-3">
-                {/* Hover tooltip */}
-                {hoverTime !== null && (
-                  <div className="absolute bottom-8 px-2 py-1 bg-black/90 rounded text-xs text-white pointer-events-none transform -translate-x-1/2 z-10" style={{ left: hoverX }}>
-                    {formatTime(hoverTime)}
-                  </div>
-                )}
-                <div
-                  ref={progressBarRef}
-                  className="relative w-full h-1 group-hover:h-2 bg-white/20 rounded-full cursor-pointer transition-all duration-200"
-                  onClick={handleProgressClick}
-                  onMouseMove={handleProgressHover}
-                  onMouseLeave={() => setHoverTime(null)}
-                >
-                  {/* Buffered */}
-                  <div className="absolute top-0 left-0 h-full bg-white/30 rounded-full pointer-events-none" style={{ width: `${bufPct}%` }} />
-                  {/* Progress */}
-                  <div className="absolute top-0 left-0 h-full bg-[#E50914] rounded-full pointer-events-none" style={{ width: `${pct}%` }} />
-                  {/* Thumb */}
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 group-hover:w-4 group-hover:h-4 bg-[#E50914] rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all pointer-events-none"
-                    style={{ left: `calc(${pct}% - 6px)` }}
-                  />
-                </div>
-              </div>
-
-              {/* Time + buttons */}
-              <div className="flex items-center gap-3">
-                {/* Play/Pause */}
-                <button onClick={safeToggle} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors">
-                  {isPlaying ? (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-                  ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+            {cs?.type !== 'embed' && (
+              <div className="bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-16 z-20 relative">
+                {/* Progress bar */}
+                <div className="group relative mb-3">
+                  {/* Hover tooltip */}
+                  {hoverTime !== null && (
+                    <div className="absolute bottom-8 px-2 py-1 bg-black/90 rounded text-xs text-white pointer-events-none transform -translate-x-1/2 z-10" style={{ left: hoverX }}>
+                      {formatTime(hoverTime)}
+                    </div>
                   )}
-                </button>
+                  <div
+                    ref={progressBarRef}
+                    className="relative w-full h-1 group-hover:h-2 bg-white/20 rounded-full cursor-pointer transition-all duration-200"
+                    onClick={handleProgressClick}
+                    onMouseMove={handleProgressHover}
+                    onMouseLeave={() => setHoverTime(null)}
+                  >
+                    {/* Buffered */}
+                    <div className="absolute top-0 left-0 h-full bg-white/30 rounded-full pointer-events-none" style={{ width: `${bufPct}%` }} />
+                    {/* Progress */}
+                    <div className="absolute top-0 left-0 h-full bg-[#E50914] rounded-full pointer-events-none" style={{ width: `${pct}%` }} />
+                    {/* Thumb */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 group-hover:w-4 group-hover:h-4 bg-[#E50914] rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all pointer-events-none"
+                      style={{ left: `calc(${pct}% - 6px)` }}
+                    />
+                  </div>
+                </div>
 
-                {/* Seek back */}
-                <button onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10 }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors" title="Rewind 10s">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.5 8L8 12l4.5 4"/><path d="M20 12a8 8 0 1 0-3 6.3"/><text x="12" y="16" fill="currentColor" fontSize="6" textAnchor="middle" stroke="none">10</text></svg>
-                </button>
-
-                {/* Seek forward */}
-                <button onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10 }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors" title="Forward 10s">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11.5 8L16 12l-4.5 4"/><path d="M4 12a8 8 0 1 0 3 6.3"/><text x="12" y="16" fill="currentColor" fontSize="6" textAnchor="middle" stroke="none">10</text></svg>
-                </button>
-
-                {/* Volume */}
-                <div className="flex items-center gap-1 group/vol">
-                  <button onClick={() => { if (videoRef.current) videoRef.current.muted = !videoRef.current.muted }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors">
-                    {volume > 0.5 ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14" fill="none" stroke="currentColor" strokeWidth="2"/></svg>
-                    ) : volume > 0 ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" strokeWidth="2"/></svg>
+                {/* Time + buttons */}
+                <div className="flex items-center gap-3">
+                  {/* Play/Pause */}
+                  <button onClick={safeToggle} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors">
+                    {isPlaying ? (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
                     ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2"/><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
                     )}
                   </button>
-                  <input
-                    type="range" min={0} max={1} step={0.05} value={volume}
-                    onChange={e => { const v = Number(e.target.value); setVolume(v); if (videoRef.current) videoRef.current.volume = v }}
-                    className="w-0 group-hover/vol:w-20 transition-all duration-300 accent-[#E50914] cursor-pointer overflow-hidden"
-                  />
+
+                  {/* Seek back */}
+                  <button onClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10 }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors" title="Rewind 10s">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.5 8L8 12l4.5 4"/><path d="M20 12a8 8 0 1 0-3 6.3"/><text x="12" y="16" fill="currentColor" fontSize="6" textAnchor="middle" stroke="none">10</text></svg>
+                  </button>
+
+                  {/* Seek forward */}
+                  <button onClick={() => { if (videoRef.current) videoRef.current.currentTime += 10 }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors" title="Forward 10s">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11.5 8L16 12l-4.5 4"/><path d="M4 12a8 8 0 1 0 3 6.3"/><text x="12" y="16" fill="currentColor" fontSize="6" textAnchor="middle" stroke="none">10</text></svg>
+                  </button>
+
+                  {/* Volume */}
+                  <div className="flex items-center gap-1 group/vol">
+                    <button onClick={() => { if (videoRef.current) videoRef.current.muted = !videoRef.current.muted }} className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors">
+                      {volume > 0.5 ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" strokeWidth="2"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14" fill="none" stroke="currentColor" strokeWidth="2"/></svg>
+                      ) : volume > 0 ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" strokeWidth="2"/></svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2"/><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
+                      )}
+                    </button>
+                    <input
+                      type="range" min={0} max={1} step={0.05} value={volume}
+                      onChange={e => { const v = Number(e.target.value); setVolume(v); if (videoRef.current) videoRef.current.volume = v }}
+                      className="w-0 group-hover/vol:w-20 transition-all duration-300 accent-[#E50914] cursor-pointer overflow-hidden"
+                    />
+                  </div>
+
+                  {/* Time display */}
+                  <span className="text-white/80 text-xs font-mono tabular-nums tracking-tight">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
+
+                  <div className="flex-1" />
+
+                  {/* Speed */}
+                  <select
+                    value={playbackRate}
+                    onChange={e => { const r = Number(e.target.value); setPlaybackRate(r); if (videoRef.current) videoRef.current.playbackRate = r }}
+                    className="bg-transparent text-white text-xs rounded px-2 py-1 outline-none hover:bg-white/10 transition-colors cursor-pointer appearance-none"
+                  >
+                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map(r => (
+                      <option key={r} value={r} className="bg-black">{r}x</option>
+                    ))}
+                  </select>
+
+                  {/* Fullscreen */}
+                  <button
+                    onClick={() => document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()}
+                    className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors"
+                  >
+                    {isFullscreen ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    )}
+                  </button>
                 </div>
-
-                {/* Time display */}
-                <span className="text-white/80 text-xs font-mono tabular-nums tracking-tight">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-
-                <div className="flex-1" />
-
-                {/* Speed */}
-                <select
-                  value={playbackRate}
-                  onChange={e => { const r = Number(e.target.value); setPlaybackRate(r); if (videoRef.current) videoRef.current.playbackRate = r }}
-                  className="bg-transparent text-white text-xs rounded px-2 py-1 outline-none hover:bg-white/10 transition-colors cursor-pointer appearance-none"
-                >
-                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map(r => (
-                    <option key={r} value={r} className="bg-black">{r}x</option>
-                  ))}
-                </select>
-
-                {/* Fullscreen */}
-                <button
-                  onClick={() => document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()}
-                  className="w-9 h-9 flex items-center justify-center text-white hover:text-[#E50914] transition-colors"
-                >
-                  {isFullscreen ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-                  )}
-                </button>
               </div>
-            </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
