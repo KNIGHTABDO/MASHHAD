@@ -20,7 +20,7 @@ export function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo */}
           <div className="flex items-center">
-            <Image src="/logo.png" alt="مشهد" width={160} height={160} className="h-10 w-auto" />
+            <Image src="/logo.png" alt="مشهد" width={200} height={200} className="h-14 w-auto" />
           </div>
 
           {/* Links */}

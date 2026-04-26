@@ -67,7 +67,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16 gap-4">
 
           <Link href="/" className="flex items-center flex-shrink-0">
-            <Image src="/logo.png" alt="مشهد" width={160} height={160} className="h-10 w-auto" priority />
+            <Image src="/logo.png" alt="مشهد" width={200} height={200} className="h-16 w-auto" priority />
           </Link>
 
           {/* Nav Links */}
