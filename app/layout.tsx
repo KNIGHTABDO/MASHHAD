@@ -20,6 +20,17 @@ export const metadata: Metadata = {
   description: 'شاهد أحدث الأفلام والمسلسلات العربية والعالمية بجودة عالية على مشهد.',
   keywords: ['أفلام', 'مسلسلات', 'عربي', 'بث مباشر', 'مشهد'],
   referrer: 'origin',
+  icons: {
+    icon: '/logo.png',
+    apple: '/logo.png',
+  },
+  openGraph: {
+    title: 'مشهد — منصة المحتوى العربي',
+    description: 'شاهد أحدث الأفلام والمسلسلات العربية والعالمية بجودة عالية على مشهد.',
+    siteName: 'مشهد',
+    type: 'website',
+    locale: 'ar_SA',
+  },
 }
 
 export default function RootLayout({
