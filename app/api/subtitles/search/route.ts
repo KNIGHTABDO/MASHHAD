@@ -374,7 +374,7 @@ async function fetchSubDL(
       ...(episode && { episode_number: episode }),
     })
 
-    const res = await fetch(`https://api.subdl.com/auto?${params}`, {
+    const res = await fetch(`https://api.subdl.com/api/v1/subtitles?${params}`, {
       next: { revalidate: 3600 },
     })
     if (!res.ok) {
@@ -431,7 +431,7 @@ export async function POST(request: Request) {
     }
 
     // SubDL returns ZIP files — use fflate to decompress
-    if (downloadLink.includes('dl.subdl.com')) {
+    if (downloadLink.includes('subdl.com') && downloadLink.includes('.zip')) {
       return await handleSubDLDownload(downloadLink)
     }
 
