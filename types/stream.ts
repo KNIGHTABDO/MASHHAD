@@ -5,6 +5,7 @@ export interface StreamResult {
   type: 'hls' | 'mp4' | 'dash' | 'embed'
   isRealDebrid: boolean
   label?: string
+  fileName?: string // The actual video filename for subtitle matching
 }
 
 export interface ServerAdapter {

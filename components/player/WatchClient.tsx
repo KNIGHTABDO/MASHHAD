@@ -194,9 +194,9 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     async function fetchSubs() {
       setSubsLoading(true)
       try {
-        // Extract the current stream filename for subtitle-to-stream matching
+        // Use the actual video filename for subtitle-to-stream release matching
         const cs = streams[currentStreamIndex]
-        const streamFile = cs?.url ? decodeURIComponent(cs.url.split('/').pop() || '') : ''
+        const streamFile = cs?.fileName || ''
 
         const params = new URLSearchParams({
           tmdbId: contentId,
@@ -617,14 +617,20 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
                           <button
                             key={s.fileId}
                             onClick={() => { loadSubtitle(s); setSubtitleMenuOpen(false) }}
-                            className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center justify-between gap-2 ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-all ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
                           >
-                            <span className="flex items-center gap-2 min-w-0">
-                              {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
-                              <span className="truncate">{s.uploaderName}</span>
-                              {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">★ الأفضل</span>}
+                            <span className="flex items-center justify-between gap-2">
+                              <span className="flex items-center gap-2 min-w-0">
+                                {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
+                                <span className="truncate">{s.uploaderName}</span>
+                                {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">★ الأفضل</span>}
+                                {s.source && <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${s.source === 'subdl' ? 'bg-blue-500/20 text-blue-400' : s.source === 'opensubtitles' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>{s.source === 'subdl' ? 'SubDL' : s.source === 'opensubtitles' ? 'OS' : 'Stremio'}</span>}
+                              </span>
+                              <span className="text-[10px] text-[#555] flex-shrink-0">
+                                {s.syncScore != null && s.syncScore > 0 ? `⚡${s.syncScore}` : `⬇${s.downloadCount}`}
+                              </span>
                             </span>
-                            <span className="text-xs text-[#666] flex-shrink-0">⬇ {s.downloadCount}</span>
+                            {s.fileName && <p className="text-[10px] text-[#444] truncate mt-0.5 ml-4">{s.fileName.replace(/\.[^.]+$/, '').substring(0, 50)}</p>}
                           </button>
                         ))}
                       </motion.div>

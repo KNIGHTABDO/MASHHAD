@@ -146,6 +146,7 @@ export const realDebridAdapter: ServerAdapter = {
 
           if (unrestricted.download) {
             const quality = unrestricted.filename?.match(/(\d{3,4}p)/i)?.[1] || 'auto'
+            const rdFileName = unrestricted.filename || ''
             
             // If streamable, get transcoded HLS stream for maximum browser compatibility
             if (unrestricted.streamable === 1) {
@@ -164,6 +165,7 @@ export const realDebridAdapter: ServerAdapter = {
                       isRealDebrid: true,
                       quality,
                       label: `RD Browser-Safe (HLS) ${quality}`,
+                      fileName: rdFileName,
                     })
                   }
                 }
@@ -180,6 +182,7 @@ export const realDebridAdapter: ServerAdapter = {
               isRealDebrid: true,
               quality,
               label: `RD Direct ${quality}`,
+              fileName: rdFileName,
             })
           }
         } catch (err) {

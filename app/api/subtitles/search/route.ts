@@ -1,49 +1,85 @@
 import { NextResponse } from 'next/server'
+import { unzipSync } from 'fflate'
 
 // ─── Scoring weights ───
-// The goal: find the subtitle that is PERFECTLY synced with the audio.
-// Subtitles are made for specific video releases (BluRay, WEB-DL, HDTV, etc.)
-// If we match the release group/tags to the stream filename, sync is near-perfect.
+// The ONLY way to get perfect lip sync is to find the subtitle that was
+// made for the EXACT SAME video release you are watching.
+// e.g. if you watch "Movie.2024.1080p.WEB-DL.DDP5.1.x264-NTb.mkv",
+// the subtitle "Movie.2024.1080p.WEB-DL.DDP5.1.x264-NTb.srt" will be PERFECT.
 const SCORE = {
-  RELEASE_MATCH:       15,  // Subtitle filename matches stream release tags
-  RESOLUTION_MATCH:    5,   // Resolution matches (1080p, 720p, etc.)
-  HI_PENALTY:         -3,   // Hearing-impaired subs have [sounds] that hurt sync feel
-  MACHINE_TRANSLATED: -10,  // Machine translations are almost always out of sync
-  DOWNLOAD_PER_500:    1,   // Community trust: more downloads = more verified
+  RELEASE_GROUP_MATCH: 20,  // Same release group (NTb, FLUX, etc.) = almost guaranteed sync
+  RELEASE_MATCH:       15,  // Release tags overlap (WEB-DL, x264, etc.)
+  RESOLUTION_MATCH:    5,   // Same resolution
+  HI_PENALTY:         -3,   // Hearing-impaired tags hurt feel
+  MACHINE_TRANSLATED: -10,  // Machine translations are out of sync
+  DOWNLOAD_PER_1000:   1,   // Community trust
   DOWNLOAD_CAP:        5,   // Max points from downloads
   RATING_MULTIPLIER:   3,   // Direct quality rating
-  SOURCE_SUBDL:        3,   // SubDL tends to have well-synced Arabic subs
-  SOURCE_STREMIO:      2,   // Stremio legacy DB is reliable
-  SOURCE_OPENSUBS:     1,   // OpenSubtitles REST is good but generic
-  TRUSTED_UPLOADER:    2,   // Known good uploaders
-  HASH_MATCH:          20,  // Perfect hash match (if available)
+  SOURCE_SUBDL:        2,   // SubDL has great Arabic coverage
+  SOURCE_OPENSUBS:     1,   // OpenSubtitles broad catalog
+  SOURCE_STREMIO:      0,   // Stremio has NO metadata, can't judge quality
 }
 
-// Release tags used to match subtitles to specific video files
-const RELEASE_TAGS = [
-  'bluray', 'bdrip', 'brrip', 'webrip', 'web-dl', 'webdl', 'web',
-  'hdtv', 'hdcam', 'hdrip', 'dvdrip', 'dvdscr', 'ts', 'cam',
-  'amzn', 'nf', 'netflix', 'hulu', 'dsnp', 'disney', 'atvp', 'apple',
-  'hmax', 'max', 'pcok', 'peacock', 'paramount',
-  'x264', 'x265', 'h264', 'h265', 'hevc', 'avc',
-  'aac', 'ac3', 'dts', 'atmos', 'eac3',
-  'yts', 'rarbg', 'sparks', 'fleet', 'pahe', 'psa', 'qxr',
-  'ntb', 'cmrg', 'eztv', 'lol', 'dimension', 'ion10',
-  'yify', 'tigole', 'mkvcage', 'sujaidr',
+// Release groups known for quality subtitle matching
+const RELEASE_GROUPS = [
+  'ntb', 'flux', 'cmrg', 'eztv', 'lol', 'dimension', 'ion10',
+  'yts', 'yify', 'rarbg', 'sparks', 'fleet', 'pahe', 'psa', 'qxr',
+  'tigole', 'mkvcage', 'sujaidr', 'epsilon', 'tbs', 'gossip',
+  'mkvcinemas', 'galaxy', 'ethel', 'mixed', 'evo', 'fgt',
+  'mtb', 'btn', 'phoenix', 'dread', 'cakes', 'hone', 'monkee',
+  'nfx', 'succubus', 'edith', 'kogi', 'tommy', 'ggez', 'ggwp',
+  'playweb', 'peculate', 'groupb', 'xebec', 'smurf',
 ]
 
-const RESOLUTION_TAGS = ['2160p', '4k', '1080p', '720p', '480p', '360p']
+const SOURCE_TAGS = [
+  'bluray', 'bdrip', 'brrip', 'webrip', 'web-dl', 'webdl', 'web',
+  'hdtv', 'hdcam', 'hdrip', 'dvdrip', 'dvdscr',
+  'amzn', 'nf', 'netflix', 'hulu', 'dsnp', 'disney', 'atvp', 'apple',
+  'hmax', 'max', 'pcok', 'peacock', 'paramount',
+]
 
-function extractTags(filename: string): string[] {
-  if (!filename) return []
-  const lower = filename.toLowerCase().replace(/[._\-\[\]()]/g, ' ')
-  const words = lower.split(/\s+/)
-  return words.filter(w => [...RELEASE_TAGS, ...RESOLUTION_TAGS].includes(w))
+const CODEC_TAGS = [
+  'x264', 'x265', 'h264', 'h265', 'hevc', 'avc',
+  'aac', 'ac3', 'dts', 'atmos', 'eac3', 'ddp5', 'dd5',
+]
+
+const RESOLUTION_TAGS = ['2160p', '4k', '1080p', '720p', '480p']
+
+function normalizeFilename(fn: string): string {
+  if (!fn) return ''
+  return fn.toLowerCase()
+    .replace(/\.[^.]+$/, '')         // remove extension
+    .replace(/[._\-\[\](){}]/g, ' ') // normalize separators
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractGroup(filename: string): string | null {
+  const norm = normalizeFilename(filename)
+  const words = norm.split(' ')
+  const last = words[words.length - 1]
+  if (RELEASE_GROUPS.includes(last)) return last
+  // Also check second-to-last (sometimes there's a tag after group)
+  if (words.length > 1 && RELEASE_GROUPS.includes(words[words.length - 2])) return words[words.length - 2]
+  return null
+}
+
+function extractAllTags(filename: string): Set<string> {
+  const norm = normalizeFilename(filename)
+  const words = norm.split(' ')
+  const tags = new Set<string>()
+  for (const w of words) {
+    if (SOURCE_TAGS.includes(w) || CODEC_TAGS.includes(w) || RESOLUTION_TAGS.includes(w)) {
+      tags.add(w)
+    }
+    // Handle "web dl" as "web-dl"
+    if (w === 'web' && words.includes('dl')) tags.add('web-dl')
+  }
+  return tags
 }
 
 function extractResolution(text: string): string | null {
-  if (!text) return null
-  const lower = text.toLowerCase()
+  const lower = (text || '').toLowerCase()
   for (const res of RESOLUTION_TAGS) {
     if (lower.includes(res)) return res
   }
@@ -66,50 +102,62 @@ interface RawSubtitle {
 
 function scoreSub(sub: RawSubtitle, streamFileName: string): number {
   let score = 0
+  const subName = sub.fileName || sub.releaseName || ''
 
-  // 1. Release tag matching — THE MOST IMPORTANT FACTOR for lip sync
-  const subTags = extractTags(sub.fileName || sub.releaseName || '')
-  const streamTags = extractTags(streamFileName || '')
-  
-  if (subTags.length > 0 && streamTags.length > 0) {
-    const matchCount = subTags.filter(t => streamTags.includes(t)).length
-    const matchRatio = matchCount / Math.max(streamTags.length, 1)
-    score += Math.round(matchRatio * SCORE.RELEASE_MATCH)
+  // If no stream filename, we can't do release matching — just use metadata
+  if (!streamFileName) {
+    // Only metadata-based scoring
+    if (sub.isHearingImpaired) score += SCORE.HI_PENALTY
+    if (sub.isMachineTranslated) score += SCORE.MACHINE_TRANSLATED
+    const dlScore = Math.min(Math.floor((sub.downloadCount || 0) / 1000), SCORE.DOWNLOAD_CAP)
+    score += dlScore
+    if (sub.rating > 0) score += Math.round(sub.rating * SCORE.RATING_MULTIPLIER)
+    if (sub.source === 'subdl') score += SCORE.SOURCE_SUBDL
+    else if (sub.source === 'opensubtitles') score += SCORE.SOURCE_OPENSUBS
+    return score
   }
 
-  // 2. Resolution match
-  const subRes = extractResolution(sub.fileName || sub.releaseName || '')
-  const streamRes = extractResolution(streamFileName || '')
+  // 1. RELEASE GROUP MATCH — strongest sync signal
+  const subGroup = extractGroup(subName)
+  const streamGroup = extractGroup(streamFileName)
+  if (subGroup && streamGroup && subGroup === streamGroup) {
+    score += SCORE.RELEASE_GROUP_MATCH
+  }
+
+  // 2. Release tags overlap
+  const subTags = extractAllTags(subName)
+  const streamTags = extractAllTags(streamFileName)
+  if (subTags.size > 0 && streamTags.size > 0) {
+    let matches = 0
+    for (const t of subTags) {
+      if (streamTags.has(t)) matches++
+    }
+    const ratio = matches / Math.max(streamTags.size, 1)
+    score += Math.round(ratio * SCORE.RELEASE_MATCH)
+  }
+
+  // 3. Resolution match
+  const subRes = extractResolution(subName)
+  const streamRes = extractResolution(streamFileName)
   if (subRes && streamRes && subRes === streamRes) {
     score += SCORE.RESOLUTION_MATCH
   }
 
-  // 3. Hearing impaired penalty
-  if (sub.isHearingImpaired) {
-    score += SCORE.HI_PENALTY
-  }
+  // 4. Penalties
+  if (sub.isHearingImpaired) score += SCORE.HI_PENALTY
+  if (sub.isMachineTranslated) score += SCORE.MACHINE_TRANSLATED
 
-  // 4. Machine translated — hard penalty
-  if (sub.isMachineTranslated) {
-    score += SCORE.MACHINE_TRANSLATED
-  }
-
-  // 5. Download count — capped community trust
-  const dlScore = Math.min(
-    Math.floor((sub.downloadCount || 0) / 500) * SCORE.DOWNLOAD_PER_500,
-    SCORE.DOWNLOAD_CAP
-  )
+  // 5. Community trust (capped)
+  const dlScore = Math.min(Math.floor((sub.downloadCount || 0) / 1000), SCORE.DOWNLOAD_CAP)
   score += dlScore
 
   // 6. Rating
-  if (sub.rating && sub.rating > 0) {
-    score += Math.round(sub.rating * SCORE.RATING_MULTIPLIER)
-  }
+  if (sub.rating > 0) score += Math.round(sub.rating * SCORE.RATING_MULTIPLIER)
 
   // 7. Source priority
   if (sub.source === 'subdl') score += SCORE.SOURCE_SUBDL
-  else if (sub.source === 'stremio') score += SCORE.SOURCE_STREMIO
   else if (sub.source === 'opensubtitles') score += SCORE.SOURCE_OPENSUBS
+  else if (sub.source === 'stremio') score += SCORE.SOURCE_STREMIO
 
   return score
 }
@@ -122,7 +170,7 @@ export async function GET(request: Request) {
   const season = searchParams.get('season')
   const episode = searchParams.get('episode')
   const language = searchParams.get('language') || 'ar'
-  const streamFile = searchParams.get('streamFile') || '' // stream filename for matching
+  const streamFile = searchParams.get('streamFile') || ''
 
   if (!tmdbId) return NextResponse.json({ error: 'Missing tmdbId' }, { status: 400 })
 
@@ -133,43 +181,47 @@ export async function GET(request: Request) {
   if (!TMDB_KEY) return NextResponse.json({ subtitles: [] })
 
   try {
-    // ── Step 1: Get IMDB ID for Stremio ──
+    // Get IMDB ID for Stremio
     const extRes = await fetch(
       `https://api.themoviedb.org/3/${type === 'movie' ? 'movie' : 'tv'}/${tmdbId}/external_ids?api_key=${TMDB_KEY}`
     )
     const extData = await extRes.json()
     const imdbId = extData.imdb_id
 
-    // ── Step 2: Fetch from ALL sources in parallel ──
+    console.log(`[Subtitles] Searching for ${tmdbId} (${imdbId}), stream: "${streamFile}"`)
+
+    // Fetch from ALL sources in parallel
     const [stremioSubs, restSubs, subdlSubs] = await Promise.all([
       fetchStremio(imdbId, type, season, episode, language),
       fetchOpenSubtitles(tmdbId, type, season, episode, language, OS_API_KEY),
       fetchSubDL(tmdbId, type, season, episode, language, SUBDL_KEY),
     ])
 
-    // ── Step 3: Combine and deduplicate ──
+    console.log(`[Subtitles] Found: Stremio=${stremioSubs.length}, OpenSubs=${restSubs.length}, SubDL=${subdlSubs.length}`)
+
+    // Combine and deduplicate
     let allSubs = [...stremioSubs, ...restSubs, ...subdlSubs]
-    
-    // Deduplicate by similar filenames
     const seen = new Set<string>()
     allSubs = allSubs.filter(sub => {
-      const key = (sub.fileName || sub.id).toLowerCase().replace(/\s+/g, '')
+      const key = (sub.fileName || sub.id).toLowerCase().replace(/\s+/g, '').substring(0, 60)
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
 
-    // ── Step 4: Score and rank ──
-    const scored = allSubs.map(sub => ({
-      ...sub,
-      syncScore: scoreSub(sub, streamFile),
-    }))
-
-    // Sort by syncScore descending (best match first)
+    // Score and rank
+    const scored = allSubs.map(sub => {
+      const syncScore = scoreSub(sub, streamFile)
+      return { ...sub, syncScore }
+    })
     scored.sort((a, b) => b.syncScore - a.syncScore)
 
-    // Convert to the client-expected format
-    const subtitles = scored.map(s => ({
+    // Log top 3 for debugging
+    scored.slice(0, 3).forEach((s, i) => {
+      console.log(`[Subtitles] #${i + 1}: score=${s.syncScore} src=${s.source} file="${s.fileName?.substring(0, 60)}"`)
+    })
+
+    const subtitles = scored.slice(0, 25).map(s => ({
       id: s.id,
       fileId: s.fileId,
       fileName: s.fileName,
@@ -181,14 +233,13 @@ export async function GET(request: Request) {
       source: s.source,
     }))
 
-    // ── Step 5: If no Arabic subs found, try English fallback ──
+    // English fallback if no Arabic found
     if (subtitles.length === 0 && language === 'ar') {
       const [enStremio, enRest, enSubdl] = await Promise.all([
         fetchStremio(imdbId, type, season, episode, 'en'),
         fetchOpenSubtitles(tmdbId, type, season, episode, 'en', OS_API_KEY),
         fetchSubDL(tmdbId, type, season, episode, 'en', SUBDL_KEY),
       ])
-
       let enSubs = [...enStremio, ...enRest, ...enSubdl]
       const enSeen = new Set<string>()
       enSubs = enSubs.filter(sub => {
@@ -197,40 +248,26 @@ export async function GET(request: Request) {
         enSeen.add(key)
         return true
       })
-
-      const enScored = enSubs.map(sub => ({
-        ...sub,
-        syncScore: scoreSub(sub, streamFile),
-      }))
+      const enScored = enSubs.map(sub => ({ ...sub, syncScore: scoreSub(sub, streamFile) }))
       enScored.sort((a, b) => b.syncScore - a.syncScore)
-
-      const enSubtitles = enScored.slice(0, 15).map(s => ({
-        id: s.id,
-        fileId: s.fileId,
-        fileName: s.fileName,
-        language: 'en',
-        downloadCount: s.downloadCount,
-        rating: s.rating,
-        uploaderName: `${s.uploaderName} (EN Fallback)`,
-        syncScore: s.syncScore,
-        source: s.source,
-      }))
-
-      return NextResponse.json({ subtitles: enSubtitles, fallbackLanguage: 'en' }, {
-        headers: { 'Cache-Control': 'public, s-maxage=1800' },
+      return NextResponse.json({
+        subtitles: enScored.slice(0, 15).map(s => ({
+          id: s.id, fileId: s.fileId, fileName: s.fileName, language: 'en',
+          downloadCount: s.downloadCount, rating: s.rating,
+          uploaderName: `${s.uploaderName} (EN)`, syncScore: s.syncScore, source: s.source,
+        })),
+        fallbackLanguage: 'en',
       })
     }
 
-    return NextResponse.json({ subtitles: subtitles.slice(0, 20) }, {
-      headers: { 'Cache-Control': 'public, s-maxage=1800' },
-    })
+    return NextResponse.json({ subtitles })
   } catch (error) {
     console.error('[Subtitles]', error)
     return NextResponse.json({ subtitles: [] })
   }
 }
 
-// ─── Source 1: Stremio OpenSubtitles v3 (Legacy DB) ───
+// ─── Source 1: Stremio (minimal metadata — id, url, lang only) ───
 async function fetchStremio(
   imdbId: string | null, type: string, season: string | null,
   episode: string | null, language: string
@@ -240,30 +277,32 @@ async function fetchStremio(
     const stremioType = type === 'movie' ? 'movie' : 'series'
     const stremioId = type === 'movie' ? imdbId : `${imdbId}:${season}:${episode}`
     const langCode = language === 'ar' ? 'ara' : language === 'en' ? 'eng' : language
-    
+
     const res = await fetch(
       `https://opensubtitles-v3.strem.io/subtitles/${stremioType}/${stremioId}/${langCode}.json`,
       { next: { revalidate: 3600 } }
     )
     if (!res.ok) return []
-    
     const data = await res.json()
     if (!data.subtitles) return []
-    
+
+    // Stremio API returns ONLY: id, url, SubEncoding, lang, m, g
+    // NO filename, NO download count, NO rating — we can't judge quality
     return data.subtitles
       .filter((s: any) => s.lang === langCode)
+      .slice(0, 10)
       .map((s: any) => ({
         id: `stremio-${s.id}`,
         fileId: s.url,
-        fileName: s.SubFileName || s.id + '.srt',
+        fileName: '',  // Stremio provides NO filename
         language,
-        downloadCount: s.SubDownloadsCnt ? parseInt(s.SubDownloadsCnt) : 5000,
-        rating: s.SubRating ? parseFloat(s.SubRating) : 0,
-        uploaderName: 'Stremio',
+        downloadCount: 0,   // Unknown
+        rating: 0,          // Unknown
+        uploaderName: `Stremio #${s.id.slice(-4)}`,
         source: 'stremio',
-        isHearingImpaired: s.SubHearingImpaired === '1',
+        isHearingImpaired: false,
         isMachineTranslated: false,
-        releaseName: s.MovieReleaseName || s.SubFileName || '',
+        releaseName: '',
       }))
   } catch (err) {
     console.error('[Stremio Subs]', err)
@@ -282,6 +321,8 @@ async function fetchOpenSubtitles(
       tmdb_id: tmdbId,
       languages: language,
       type: type === 'movie' ? 'movie' : 'episode',
+      order_by: 'download_count',
+      order_direction: 'desc',
       ...(season && { season_number: season }),
       ...(episode && { episode_number: episode }),
     })
@@ -294,11 +335,10 @@ async function fetchOpenSubtitles(
       },
       next: { revalidate: 3600 },
     })
-
     if (!res.ok) return []
     const data = await res.json()
-    
-    return (data.data || []).slice(0, 15).map((item: any) => ({
+
+    return (data.data || []).slice(0, 20).map((item: any) => ({
       id: `os-${item.id}`,
       fileId: item.attributes.files[0]?.file_id?.toString() || item.id,
       fileName: item.attributes.files[0]?.file_name || item.attributes.release || '',
@@ -337,12 +377,10 @@ async function fetchSubDL(
     const res = await fetch(`https://api.subdl.com/auto?${params}`, {
       next: { revalidate: 3600 },
     })
-
     if (!res.ok) {
-      console.error('[SubDL] Response not ok:', res.status)
+      console.error('[SubDL] HTTP', res.status)
       return []
     }
-
     const data = await res.json()
     if (!data.subtitles || !Array.isArray(data.subtitles)) return []
 
@@ -350,7 +388,7 @@ async function fetchSubDL(
       id: `subdl-${item.release_name || item.name || Math.random()}`,
       fileId: item.url ? `https://dl.subdl.com${item.url}` : '',
       fileName: item.release_name || item.name || '',
-      language: language,
+      language,
       downloadCount: item.download_count || 0,
       rating: item.rating || 0,
       uploaderName: item.author || 'SubDL',
@@ -375,12 +413,9 @@ export async function POST(request: Request) {
     let downloadLink = ''
 
     if (fileId.toString().startsWith('http')) {
-      // Direct URL (Stremio or SubDL)
       downloadLink = fileId
     } else {
-      // OpenSubtitles file ID — needs download endpoint
       if (!API_KEY) return NextResponse.json({ error: 'No API key' }, { status: 500 })
-      
       const res = await fetch('https://api.opensubtitles.com/api/v1/download', {
         method: 'POST',
         headers: {
@@ -390,144 +425,140 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({ file_id: parseInt(fileId) }),
       })
-
       if (!res.ok) return NextResponse.json({ error: 'Download failed' }, { status: 400 })
       const data = await res.json()
       downloadLink = data.link
     }
 
-    // Handle SubDL zip files
+    // SubDL returns ZIP files — use fflate to decompress
     if (downloadLink.includes('dl.subdl.com')) {
       return await handleSubDLDownload(downloadLink)
     }
 
-    // Fetch the actual SRT content
+    // Fetch the SRT content
     const srtRes = await fetch(downloadLink)
     const buffer = await srtRes.arrayBuffer()
-    
-    // Decode with smart encoding detection
-    let srtContent = decodeSubtitleBuffer(buffer, downloadLink)
+    const srtContent = decodeSubtitleBuffer(buffer)
     const vttContent = srtToVtt(srtContent)
-
-    return NextResponse.json({ vttContent, downloadUrl: downloadLink })
+    return NextResponse.json({ vttContent })
   } catch (err) {
     console.error('[Sub Download]', err)
-    return NextResponse.json({ error: 'Failed to download subtitle' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
 }
 
-// ─── Handle SubDL zip downloads ───
+// ─── Handle SubDL zip downloads with fflate ───
 async function handleSubDLDownload(url: string): Promise<NextResponse> {
   try {
     const res = await fetch(url)
     const buffer = await res.arrayBuffer()
-    
-    // SubDL returns zip files — we need to extract the SRT
-    // Use a simple zip parser (PKZip local file header)
-    const bytes = new Uint8Array(buffer)
-    const srtContent = extractSrtFromZip(bytes)
-    
-    if (!srtContent) {
-      return NextResponse.json({ error: 'No SRT found in zip' }, { status: 400 })
+    const zipData = new Uint8Array(buffer)
+
+    // Use fflate to properly decompress (handles DEFLATE method 8)
+    const unzipped = unzipSync(zipData)
+
+    // Find the best subtitle file: .srt > .ass > .vtt
+    const fileNames = Object.keys(unzipped)
+    const srtFile = fileNames.find(f => f.toLowerCase().endsWith('.srt'))
+    const assFile = fileNames.find(f => f.toLowerCase().endsWith('.ass'))
+    const vttFile = fileNames.find(f => f.toLowerCase().endsWith('.vtt'))
+    const target = srtFile || assFile || vttFile
+
+    if (!target) {
+      console.error('[SubDL Zip] No subtitle found in zip. Files:', fileNames)
+      return NextResponse.json({ error: 'No subtitle in zip' }, { status: 400 })
     }
 
-    const vttContent = srtToVtt(srtContent)
-    return NextResponse.json({ vttContent, downloadUrl: url })
+    const rawContent = unzipped[target]
+    const content = decodeSubtitleBuffer(rawContent.buffer)
+
+    // If .ass, convert to SRT-like first
+    const vttContent = target.toLowerCase().endsWith('.vtt')
+      ? content
+      : srtToVtt(target.toLowerCase().endsWith('.ass') ? assToSrt(content) : content)
+
+    return NextResponse.json({ vttContent })
   } catch (err) {
     console.error('[SubDL Zip]', err)
-    return NextResponse.json({ error: 'Failed to extract subtitle' }, { status: 500 })
+    return NextResponse.json({ error: 'Zip extraction failed' }, { status: 500 })
   }
 }
 
-// ─── Simple ZIP extractor for SRT/ASS/VTT files ───
-function extractSrtFromZip(data: Uint8Array): string | null {
-  // Look for PKZip local file headers (0x04034b50)
-  const files: { name: string; content: Uint8Array }[] = []
-  let offset = 0
+// ─── Basic ASS to SRT converter ───
+function assToSrt(ass: string): string {
+  const lines = ass.split('\n')
+  const dialogues: string[] = []
+  let idx = 1
 
-  while (offset < data.length - 4) {
-    // Check for local file header signature
-    if (data[offset] === 0x50 && data[offset + 1] === 0x4B &&
-        data[offset + 2] === 0x03 && data[offset + 3] === 0x04) {
-      
-      const compressionMethod = data[offset + 8] | (data[offset + 9] << 8)
-      const compressedSize = data[offset + 18] | (data[offset + 19] << 8) |
-                             (data[offset + 20] << 16) | (data[offset + 21] << 24)
-      const fileNameLen = data[offset + 26] | (data[offset + 27] << 8)
-      const extraFieldLen = data[offset + 28] | (data[offset + 29] << 8)
-      
-      const nameStart = offset + 30
-      const nameBytes = data.slice(nameStart, nameStart + fileNameLen)
-      const fileName = new TextDecoder().decode(nameBytes)
-      
-      const dataStart = nameStart + fileNameLen + extraFieldLen
-      
-      // Only handle stored (uncompressed) files for now
-      if (compressionMethod === 0 && compressedSize > 0) {
-        const fileContent = data.slice(dataStart, dataStart + compressedSize)
-        files.push({ name: fileName, content: fileContent })
-      }
-      
-      offset = dataStart + compressedSize
-    } else {
-      offset++
+  for (const line of lines) {
+    if (!line.startsWith('Dialogue:')) continue
+    const parts = line.substring(9).split(',')
+    if (parts.length < 10) continue
+
+    const start = parts[1].trim()
+    const end = parts[2].trim()
+    const text = parts.slice(9).join(',')
+      .replace(/\{[^}]*\}/g, '')  // Remove ASS tags
+      .replace(/\\N/g, '\n')
+      .replace(/\\n/g, '\n')
+      .trim()
+
+    if (!text) continue
+
+    const formatTime = (t: string) => {
+      const [h, m, rest] = t.split(':')
+      const [s, cs] = rest.split('.')
+      return `${h.padStart(2, '0')}:${m.padStart(2, '0')}:${s.padStart(2, '0')},${(cs || '0').padEnd(3, '0')}`
     }
+
+    dialogues.push(`${idx}\n${formatTime(start)} --> ${formatTime(end)}\n${text}\n`)
+    idx++
   }
 
-  // Prioritize: .srt > .ass > .vtt
-  const srtFile = files.find(f => f.name.toLowerCase().endsWith('.srt'))
-  const assFile = files.find(f => f.name.toLowerCase().endsWith('.ass'))
-  const vttFile = files.find(f => f.name.toLowerCase().endsWith('.vtt'))
-  
-  const target = srtFile || assFile || vttFile
-  if (!target) return null
-  
-  // Try UTF-8 first, fallback to Windows-1256 for Arabic
-  let content = new TextDecoder('utf-8').decode(target.content)
-  const badChars = (content.match(/\uFFFD/g) || []).length
-  if (badChars > 10) {
-    content = new TextDecoder('windows-1256').decode(target.content)
-  }
-  
-  return content
+  return dialogues.join('\n')
 }
 
 // ─── Smart encoding detection ───
-function decodeSubtitleBuffer(buffer: ArrayBuffer, url: string): string {
-  let content = new TextDecoder('utf-8').decode(buffer)
-  
-  const badCharsCount = (content.match(/\uFFFD/g) || []).length
-  if (badCharsCount > 20 && !url.includes('utf8')) {
-    content = new TextDecoder('windows-1256').decode(buffer)
+function decodeSubtitleBuffer(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+
+  // Check BOM for UTF-8
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(buffer)
   }
-  
+  // UTF-16 LE BOM
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+    return new TextDecoder('utf-16le').decode(buffer)
+  }
+
+  // Try UTF-8 first
+  let content = new TextDecoder('utf-8').decode(buffer)
+  const badChars = (content.match(/\uFFFD/g) || []).length
+
+  // If many replacement chars, try Windows-1256 (Arabic)
+  if (badChars > 5) {
+    const cp1256 = new TextDecoder('windows-1256').decode(buffer)
+    // Verify it looks like Arabic
+    const arabicChars = (cp1256.match(/[\u0600-\u06FF]/g) || []).length
+    if (arabicChars > 10) return cp1256
+
+    // Try ISO-8859-1 as last resort
+    return new TextDecoder('iso-8859-1').decode(buffer)
+  }
+
   return content
 }
 
 // ─── SRT to VTT converter ───
-function srtToVtt(srt: string, offsetMs = 0): string {
-  const addOffset = (time: string, offset: number) => {
-    const [hms, ms] = time.split(',')
-    const [h, m, s] = hms.split(':').map(Number)
-    let totalMs = (h * 3600000 + m * 60000 + s * 1000 + parseInt(ms)) + offset
-    totalMs = Math.max(0, totalMs)
-    const nh = Math.floor(totalMs / 3600000)
-    const nm = Math.floor((totalMs % 3600000) / 60000)
-    const ns = Math.floor((totalMs % 60000) / 1000)
-    const nms = totalMs % 1000
-    return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}:${String(ns).padStart(2, '0')}.${String(nms).padStart(3, '0')}`
-  }
-
-  const vtt = srt
+function srtToVtt(srt: string): string {
+  const cleaned = srt
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
+    // Convert SRT timestamp format to VTT
     .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
-    .replace(/(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})/g, (_, s, e) => {
-      if (offsetMs === 0) return `${s} --> ${e}`
-      return `${addOffset(s.replace('.', ','), offsetMs)} --> ${addOffset(e.replace('.', ','), offsetMs)}`
-    })
-    .replace(/^\d+$/gm, '')
+    // Remove sequence numbers on their own lines
+    .replace(/^\d+\s*$/gm, '')
     .trim()
 
-  return `WEBVTT\n\nSTYLE\n::cue {\n  background: rgba(0,0,0,0.75);\n  color: white;\n  font-size: 1.3em;\n  line-height: 1.4;\n  padding: 4px 8px;\n  border-radius: 4px;\n}\n\n${vtt}`
+  return `WEBVTT\n\nSTYLE\n::cue {\n  background: rgba(0,0,0,0.75);\n  color: white;\n  font-size: 1.3em;\n  line-height: 1.4;\n  padding: 4px 8px;\n  border-radius: 4px;\n}\n\n${cleaned}`
 }
