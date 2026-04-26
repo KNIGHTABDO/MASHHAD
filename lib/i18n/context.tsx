@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { ar } from './ar'
 import { en } from './en'
 
@@ -25,6 +26,7 @@ const translations: Record<Lang, Translations> = { ar, en }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('ar')
+  const router = useRouter()
 
   useEffect(() => {
     const saved = localStorage.getItem('mashhad-lang') as Lang | null
@@ -40,13 +42,19 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   }
 
   const setLang = useCallback((l: Lang) => {
+    // 1. Update React state immediately → UI strings flip instantly, no wait
     setLangState(l)
+    // 2. Persist preference
     localStorage.setItem('mashhad-lang', l)
     document.cookie = `mashhad-lang=${l};path=/;max-age=31536000`
+    // 3. Update html lang + dir attributes for RTL/LTR layout
     applyLang(l)
-    // Reload to re-fetch TMDB data in the new language
-    window.location.reload()
-  }, [])
+    // 4. Re-run server components with the new cookie so TMDB titles/descriptions
+    //    are re-fetched in the correct language — without a full page reload.
+    //    router.refresh() keeps the page alive, preserves scroll position and
+    //    client state, and does NOT cause a white screen flash.
+    router.refresh()
+  }, [router])
 
   return (
     <LanguageContext.Provider value={{
