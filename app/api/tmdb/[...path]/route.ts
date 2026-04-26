@@ -9,19 +9,28 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const TMDB_KEY = process.env.TMDB_API_KEY
   
-  const cookieStore = await cookies()
-  const lang = cookieStore.get('mashhad-lang')?.value || 'ar'
+  // Allow client to pass lang explicitly; fall back to cookie
+  const clientLang = searchParams.get('lang')
+  let lang = clientLang
+  if (!lang) {
+    const cookieStore = await cookies()
+    lang = cookieStore.get('mashhad-lang')?.value || 'ar'
+  }
   const tmdbLang = lang === 'ar' ? 'ar-SA' : 'en-US'
 
   const tmdbPath = path.join('/')
   const queryParams = new URLSearchParams(searchParams)
+  queryParams.delete('lang') // Remove our custom param before forwarding to TMDB
   queryParams.set('language', tmdbLang)
   queryParams.set('api_key', TMDB_KEY!)
+
+  // Search queries should not be cached as aggressively
+  const isSearch = tmdbPath.includes('search')
 
   try {
     const res = await fetch(
       `https://api.themoviedb.org/3/${tmdbPath}?${queryParams.toString()}`,
-      { next: { revalidate: 3600 } }
+      { next: { revalidate: isSearch ? 300 : 3600 } }
     )
     const data = await res.json()
     return NextResponse.json(data, {

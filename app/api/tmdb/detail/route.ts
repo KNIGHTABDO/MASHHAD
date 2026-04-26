@@ -10,8 +10,8 @@ export async function GET(request: Request) {
 
   try {
     const data = type === 'tv'
-      ? await (tmdb as any).tv(id)
-      : await (tmdb as any).movie(id)
+      ? await tmdb.series(id)
+      : await tmdb.movie(id)
 
     return NextResponse.json({
       id: data.id,

@@ -28,7 +28,7 @@ function SearchContent() {
   const [history, setHistory] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const debouncedQuery = useDebounce(query, 300)
-  const { t } = useT()
+  const { t, lang } = useT()
 
   useEffect(() => {
     try {
@@ -39,10 +39,10 @@ function SearchContent() {
   }, [])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['search', debouncedQuery],
+    queryKey: ['search', debouncedQuery, lang],
     queryFn: async () => {
       if (!debouncedQuery.trim()) return { results: [] }
-      const res = await fetch(`/api/tmdb/search/multi?query=${encodeURIComponent(debouncedQuery)}`)
+      const res = await fetch(`/api/tmdb/search/multi?query=${encodeURIComponent(debouncedQuery)}&lang=${lang}`)
       return res.json()
     },
     enabled: debouncedQuery.length > 1,
