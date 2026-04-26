@@ -500,7 +500,9 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       {cs?.type === 'embed' ? (
         <iframe 
           src={cs.url} 
-          className="w-full h-full border-0 bg-black relative z-10"
+          width="100%"
+          height="100%"
+          className="absolute inset-0 w-full h-full border-0 bg-black z-10"
           allowFullScreen
           referrerPolicy="origin"
         />
@@ -555,10 +557,10 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="absolute inset-0 flex flex-col justify-between"
+            className={`absolute inset-0 flex flex-col justify-between ${cs?.type === 'embed' ? 'pointer-events-none z-20' : ''}`}
           >
             {/* Top bar */}
-            <div className="bg-gradient-to-b from-black/80 to-transparent p-4 flex items-center gap-3">
+            <div className={`bg-gradient-to-b from-black/80 to-transparent p-4 flex items-center gap-3 ${cs?.type === 'embed' ? 'pointer-events-auto' : ''}`}>
               <button onClick={() => router.back()} className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/20 transition-all">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
