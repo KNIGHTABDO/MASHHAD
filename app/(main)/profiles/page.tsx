@@ -33,7 +33,8 @@ export default function ProfilesPage() {
     if (manageMode) return
     setActiveProfile(profile)
     document.cookie = `active_profile_id=${profile.id}; path=/; max-age=604800; samesite=lax`
-    router.push('/')
+    // Use hard navigation so the middleware receives the freshly-set cookie
+    window.location.href = '/'
   }
 
   if (loading) {
