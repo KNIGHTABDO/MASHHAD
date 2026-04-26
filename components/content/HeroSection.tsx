@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -41,6 +41,17 @@ export function HeroSection({ items }: HeroSectionProps) {
     const timer = setInterval(next, 8000)
     return () => clearInterval(timer)
   }, [next, isHovered])
+
+  // Preload the next slide's image so there's no black frame between transitions
+  useEffect(() => {
+    if (validItems.length < 2) return
+    const nextIndex = (currentIndex + 1) % validItems.length
+    const nextItem = validItems[nextIndex]
+    if (nextItem?.backdrop_path) {
+      const img = new window.Image()
+      img.src = getTMDBImageUrl(nextItem.backdrop_path, 'w1280')
+    }
+  }, [currentIndex, validItems])
 
   if (!validItems.length) return null
 
@@ -98,7 +109,8 @@ export function HeroSection({ items }: HeroSectionProps) {
                 {mediaType === 'series' && (
                   <>
                     <span className="text-[#666] text-sm">•</span>
-                    <span className="text-xs bg-[#1F1F1F] border border-[var(--border-visible)] px-2 py-0.5 rounded-md text-[#B3B3B3]">{lang === 'ar' ? 'مسلسل' : 'Series'}</span>
+                    {/* Use i18n instead of hardcoded language ternary */}
+                    <span className="text-xs bg-[#1F1F1F] border border-[var(--border-visible)] px-2 py-0.5 rounded-md text-[#B3B3B3]">{t.content.series}</span>
                   </>
                 )}
               </div>

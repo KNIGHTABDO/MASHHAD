@@ -6,6 +6,7 @@ export const ar = {
     browse: 'استعراض',
     search: 'بحث',
     watchlist: 'قائمتي',
+    skipIntro: 'تخطي المقدمة',
   },
   auth: {
     login: 'تسجيل الدخول',
@@ -45,6 +46,12 @@ export const ar = {
     watchingNext: 'ستشاهد بعد قليل',
     cancelAutoPlay: 'إلغاء',
     skippedIntro: 'تم تخطي المقدمة',
+    availableStreams: 'الخوادم المتاحة',
+    searchingStreams: 'جاري البحث عن روابط المشاهدة...',
+    failedToLoad: 'تعذّر تشغيل المحتوى',
+    goBack: 'العودة',
+    subtitleLabel: 'الترجمة',
+    bestMatch: '★ الأفضل',
   },
   profiles: {
     title: 'من يشاهد؟',
@@ -81,6 +88,7 @@ export const ar = {
     comedySeries: 'مسلسلات كوميدية',
     recommended: 'قد يعجبك أيضاً',
     cast: 'من نفس الممثلين',
+    director: 'الإخراج',
     episodes: 'الحلقات',
     season: 'الموسم',
     episode: 'الحلقة',
@@ -94,6 +102,7 @@ export const ar = {
     resume: 'تابع المشاهدة',
     noResults: 'لا توجد نتائج',
     loading: 'جاري التحميل...',
+    series: 'مسلسل',
   },
   search: {
     placeholder: 'ابحث عن أفلام ومسلسلات...',

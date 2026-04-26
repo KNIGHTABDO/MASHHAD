@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
+  // Auth check
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ intro: null, outro: null }, { status: 401 })
+  } catch {
+    return NextResponse.json({ intro: null, outro: null }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const tmdb_id = searchParams.get('tmdb_id')
   const type = searchParams.get('type')
@@ -17,7 +27,7 @@ export async function GET(request: Request) {
       `https://api.themoviedb.org/3/tv/${tmdb_id}/external_ids?api_key=${process.env.TMDB_API_KEY}`
     )
     if (!tmdbRes.ok) throw new Error('Failed to fetch from TMDB')
-    
+
     const tmdbData = await tmdbRes.json()
     const imdb_id = tmdbData.imdb_id
 
@@ -30,7 +40,7 @@ export async function GET(request: Request) {
       `https://api.introdb.app/segments?imdb_id=${imdb_id}&season=${season}&episode=${episode}`,
       { headers: { 'User-Agent': 'Mashhad-App/1.0' } }
     )
-    
+
     if (!introRes.ok) {
       return NextResponse.json({ intro: null, outro: null })
     }

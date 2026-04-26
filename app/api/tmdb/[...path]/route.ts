@@ -1,14 +1,43 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
+
+// Allowlist of valid TMDB path prefixes — prevents proxying arbitrary TMDB endpoints
+const ALLOWED_TMDB_PREFIXES = [
+  'movie/', 'tv/', 'search/', 'trending/', 'person/', 'discover/',
+  'configuration/', 'genre/', 'network/', 'collection/', 'keyword/',
+]
+
+function isAllowedPath(path: string): boolean {
+  return ALLOWED_TMDB_PREFIXES.some(prefix => path.startsWith(prefix))
+}
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Auth check — prevents unauthenticated users from burning our TMDB quota
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  } catch {
+    return NextResponse.json({ error: 'Auth error' }, { status: 401 })
+  }
+
   const { path } = await params
   const { searchParams } = new URL(request.url)
   const TMDB_KEY = process.env.TMDB_API_KEY
-  
+
+  const tmdbPath = path.join('/')
+
+  // Path allowlist check
+  if (!isAllowedPath(tmdbPath)) {
+    return NextResponse.json({ error: 'Path not allowed' }, { status: 403 })
+  }
+
   // Allow client to pass lang explicitly; fall back to cookie
   const clientLang = searchParams.get('lang')
   let lang = clientLang
@@ -18,7 +47,6 @@ export async function GET(
   }
   const tmdbLang = lang === 'ar' ? 'ar-SA' : 'en-US'
 
-  const tmdbPath = path.join('/')
   const queryParams = new URLSearchParams(searchParams)
   queryParams.delete('lang') // Remove our custom param before forwarding to TMDB
   queryParams.set('language', tmdbLang)

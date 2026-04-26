@@ -6,6 +6,7 @@ export const en = {
     browse: 'Browse',
     search: 'Search',
     watchlist: 'My List',
+    skipIntro: 'Skip Intro',
   },
   auth: {
     login: 'Sign In',
@@ -45,6 +46,12 @@ export const en = {
     watchingNext: 'Up Next',
     cancelAutoPlay: 'Cancel',
     skippedIntro: 'Intro skipped',
+    availableStreams: 'Available Streams',
+    searchingStreams: 'Searching for streams...',
+    failedToLoad: 'Failed to load content',
+    goBack: 'Go Back',
+    subtitleLabel: 'Subtitles',
+    bestMatch: '★ Best',
   },
   profiles: {
     title: "Who's Watching?",
@@ -81,6 +88,7 @@ export const en = {
     comedySeries: 'Comedy Series',
     recommended: 'You May Also Like',
     cast: 'Cast',
+    director: 'Director',
     episodes: 'Episodes',
     season: 'Season',
     episode: 'Episode',
@@ -94,6 +102,7 @@ export const en = {
     resume: 'Resume',
     noResults: 'No results',
     loading: 'Loading...',
+    series: 'Series',
   },
   search: {
     placeholder: 'Search movies and series...',

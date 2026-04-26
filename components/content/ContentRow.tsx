@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { ContentCard } from './ContentCard'
 
@@ -27,6 +27,7 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(true)
+  const rafRef = useRef<number | null>(null)
 
   if (!items.length) return null
 
@@ -37,12 +38,17 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
     el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' })
   }
 
-  function onScroll() {
-    const el = scrollRef.current
-    if (!el) return
-    setCanScrollLeft(el.scrollLeft > 10)
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10)
-  }
+  // Debounce scroll state updates via requestAnimationFrame to prevent
+  // 12 synchronous re-renders per scroll tick across 6 rows
+  const onScroll = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      const el = scrollRef.current
+      if (!el) return
+      setCanScrollLeft(el.scrollLeft > 10)
+      setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10)
+    })
+  }, [])
 
   const cardWidth = variant === 'large' ? 'w-72 flex-shrink-0' : variant === 'numbered' ? 'w-44 flex-shrink-0' : 'w-40 flex-shrink-0'
 
@@ -63,7 +69,7 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
 
         {/* Scroll container */}
         <div className="relative">
-          {/* Left arrow — RTL: right arrow */}
+          {/* Left arrow */}
           {canScrollLeft && (
             <button
               onClick={() => scroll('left')}
@@ -75,7 +81,7 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
             </button>
           )}
 
-          {/* Right arrow — RTL: left arrow */}
+          {/* Right arrow */}
           {canScrollRight && (
             <button
               onClick={() => scroll('right')}
@@ -87,11 +93,19 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
             </button>
           )}
 
+          {/* Mobile: fade-out edge hint so users know there's more content */}
+          <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0A0A0A] to-transparent pointer-events-none z-[5] md:hidden" />
+
           <div
             ref={scrollRef}
             onScroll={onScroll}
-            className="flex gap-3 overflow-x-auto overflow-y-visible scrollbar-hide py-4 -my-4"
-            style={{ transform: 'translateZ(0)' }}
+            className="flex gap-3 overflow-x-auto scrollbar-hide py-4 -my-4"
+            style={{
+              transform: 'translateZ(0)',
+              // overflow-y: clip preserves the GPU compositor layer
+              // (overflow-y: visible defeats translateZ(0) promotion)
+              overflowY: 'clip',
+            }}
           >
             {items.map((item, index) => (
               <div key={item.id} className={`${cardWidth} flex-shrink-0`}>

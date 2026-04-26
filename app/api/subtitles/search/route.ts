@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server'
 import { unzipSync } from 'fflate'
+import { createClient } from '@/lib/supabase/server'
+
+// Allowlist of legitimate subtitle CDN hostnames (SSRF protection)
+const ALLOWED_SUBTITLE_HOSTS = [
+  'dl.subdl.com',
+  'opensubtitles.com',
+  'opensubtitles.org',
+  'opensubtitles-v3.strem.io',
+  'api.opensubtitles.com',
+  'subs.smu.dk',
+  'subscene.com',
+]
 
 // ─── Scoring weights ───
 // The ONLY way to get perfect lip sync is to find the subtitle that was
@@ -164,6 +176,15 @@ function scoreSub(sub: RawSubtitle, streamFileName: string): number {
 
 // ─── GET: Search subtitles ───
 export async function GET(request: Request) {
+  // Auth check — prevents burning OpenSubtitles + SubDL quota for unauthenticated users
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ subtitles: [] }, { status: 401 })
+  } catch {
+    return NextResponse.json({ subtitles: [] }, { status: 401 })
+  }
+
   const { searchParams } = new URL(request.url)
   const tmdbId = searchParams.get('tmdbId')
   const type = searchParams.get('type') || 'movie'
@@ -405,6 +426,15 @@ async function fetchSubDL(
 
 // ─── POST: Download and convert subtitle to VTT ───
 export async function POST(request: Request) {
+  // Auth check
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch {
+    return NextResponse.json({ error: 'Auth error' }, { status: 401 })
+  }
+
   const API_KEY = process.env.OPENSUBTITLES_API_KEY
   const { fileId } = await request.json()
   if (!fileId) return NextResponse.json({ error: 'Missing fileId' }, { status: 400 })
@@ -413,6 +443,19 @@ export async function POST(request: Request) {
     let downloadLink = ''
 
     if (fileId.toString().startsWith('http')) {
+      // SSRF protection: validate the URL against allowlisted subtitle CDN hostnames
+      try {
+        const url = new URL(fileId.toString())
+        const isAllowed = ALLOWED_SUBTITLE_HOSTS.some(host =>
+          url.hostname === host || url.hostname.endsWith('.' + host)
+        )
+        if (!isAllowed) {
+          console.warn('[Subtitle POST] Blocked SSRF attempt to:', url.hostname)
+          return NextResponse.json({ error: 'URL not allowed' }, { status: 400 })
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+      }
       downloadLink = fileId
     } else {
       if (!API_KEY) return NextResponse.json({ error: 'No API key' }, { status: 500 })

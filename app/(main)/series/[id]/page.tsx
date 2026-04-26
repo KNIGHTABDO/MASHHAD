@@ -130,7 +130,7 @@ export default async function SeriesDetailPage({ params }: Props) {
           {/* Cast */}
           {cast.length > 0 && (
             <section className="mt-12 pb-16">
-              <h2 className="text-xl font-bold mb-6">{lang === 'ar' ? 'الممثلون' : 'Cast'}</h2>
+              <h2 className="text-xl font-bold mb-6">{t.content.cast}</h2>
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
                 {cast.map(member => (
                   <div key={member.id} className="text-center">

@@ -52,8 +52,11 @@ export function ContentCard({ item, mediaType, variant, index = 0, progressPerce
   }
 
   return (
+    // will-change: transform promotes this element to its own GPU layer BEFORE hover,
+    // so the backdrop-filter on the preview card doesn't trigger a mid-hover recomposition
     <div
       className="relative"
+      style={{ willChange: 'transform' }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -99,13 +102,15 @@ export function ContentCard({ item, mediaType, variant, index = 0, progressPerce
         {title}
       </p>
 
-      {/* Hover Preview Card */}
+      {/* Hover Preview Card — uses fixed positioning to escape the scroll container
+          so it doesn't fight with overflow-y: clip on the parent row */}
       <AnimatePresence>
         {hovered && item.backdrop_path && (
           <motion.div
             {...scaleIn}
             transition={{ duration: 0.2 }}
             className="absolute z-50 top-0 -translate-y-4 left-1/2 -translate-x-1/2 w-72 glass rounded-xl overflow-hidden shadow-2xl pointer-events-auto"
+            style={{ willChange: 'transform, opacity' }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
           >

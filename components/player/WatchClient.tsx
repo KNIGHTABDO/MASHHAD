@@ -89,8 +89,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   const [buffered, setBuffered] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isSeeking, setIsSeeking] = useState(false)
-  const [hoverTime, setHoverTime] = useState<number | null>(null)
-  const [hoverX, setHoverX] = useState(0)
+
   const [subtitles, setSubtitles] = useState<Subtitle[]>([])
   const [activeSub, setActiveSub] = useState<Subtitle | null>(null)
   const [subsLoading, setSubsLoading] = useState(false)
@@ -99,6 +98,12 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   const [showSkipIntro, setShowSkipIntro] = useState(false)
   const [showNextEpisodeBtn, setShowNextEpisodeBtn] = useState(false)
   const [isEnded, setIsEnded] = useState(false)
+  const [isChangingStream, setIsChangingStream] = useState(false)
+
+  // Refs for progress bar hover — avoids 2 setState calls per mousemove pixel
+  const hoverIndicatorRef = useRef<HTMLDivElement>(null)
+  const hoverTooltipRef = useRef<HTMLDivElement>(null)
+  const hoverRafRef = useRef<number | null>(null)
 
   const { volume, setVolume, playbackRate, setPlaybackRate } = usePlayerStore()
 
@@ -302,9 +307,6 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
         const data = await res.json()
         if (data.streams?.length > 0) {
           setStreams(data.streams)
-          // Always prefer Direct streams first. If the browser cannot play MKV natively
-          // (and the user doesn't have the extension), the video onError handler will
-          // automatically trigger tryNextStream() and eventually fall back to HLS.
           const directIdx = data.streams.findIndex((s: StreamResult) => s.label?.includes('Direct'))
           if (directIdx >= 0) {
             setCurrentStreamIndex(directIdx)
@@ -362,6 +364,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     if (previousStreamIndex.current !== currentStreamIndex) {
       previousStreamIndex.current = currentStreamIndex
       hasResumed.current = false // Allow seeking to lastKnownTime on new stream
+      setIsChangingStream(true)  // Show spinner until canplay fires
     }
   }, [currentStreamIndex])
 
@@ -374,6 +377,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
         video.currentTime = lastKnownTime.current
         hasResumed.current = true
       }
+      setIsChangingStream(false) // Stream is ready, hide spinner
     }
     video.addEventListener('canplay', onReady)
     return () => video.removeEventListener('canplay', onReady)
@@ -475,12 +479,30 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     videoRef.current.currentTime = pct * duration
   }
 
+  // RAF-based progress bar hover — no setState per mousemove pixel
   const handleProgressHover = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = progressBarRef.current?.getBoundingClientRect()
     if (!rect) return
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    setHoverTime(pct * duration)
-    setHoverX(e.clientX - rect.left)
+    if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
+    hoverRafRef.current = requestAnimationFrame(() => {
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+      const time = pct * duration
+      const x = e.clientX - rect.left
+      // Update DOM directly — no React re-render needed
+      if (hoverTooltipRef.current) {
+        hoverTooltipRef.current.style.display = 'block'
+        hoverTooltipRef.current.style.left = `${x}px`
+        hoverTooltipRef.current.textContent = formatTime(time)
+      }
+      if (hoverIndicatorRef.current) {
+        hoverIndicatorRef.current.style.left = `${x}px`
+      }
+    })
+  }
+
+  const handleProgressLeave = () => {
+    if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
+    if (hoverTooltipRef.current) hoverTooltipRef.current.style.display = 'none'
   }
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -496,7 +518,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       onTouchStart={showControls}
       style={{ cursor: controlsVisible ? 'default' : 'none' }}
     >
-      {/* Loading */}
+      {/* Loading state — initial load */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
           <div className="text-center flex flex-col items-center gap-5">
@@ -504,8 +526,15 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
             <div className="w-32 h-[2px] bg-white/10 rounded-full overflow-hidden">
               <div className="w-full h-full bg-gradient-to-r from-transparent via-[#E50914] to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
             </div>
-            <p className="text-[#666] text-sm">جاري البحث عن روابط المشاهدة...</p>
+            <p className="text-[#666] text-sm">{t.player.searchingStreams}</p>
           </div>
+        </div>
+      )}
+
+      {/* Stream-switching spinner (when user picks a different server) */}
+      {isChangingStream && !loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20 pointer-events-none">
+          <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-[#E50914] animate-spin" />
         </div>
       )}
 
@@ -514,9 +543,9 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
         <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
           <div className="text-center max-w-md px-6">
             <div className="text-5xl mb-4">😔</div>
-            <h2 className="text-xl font-bold mb-2">تعذّر تشغيل المحتوى</h2>
+            <h2 className="text-xl font-bold mb-2">{t.player.failedToLoad}</h2>
             <p className="text-[#B3B3B3] mb-6">{error}</p>
-            <button onClick={() => router.back()} className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 transition-colors">العودة</button>
+            <button onClick={() => router.back()} className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 transition-colors">{t.player.goBack}</button>
           </div>
         </div>
       )}
@@ -625,7 +654,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
                               <span className="flex items-center gap-2 min-w-0">
                                 {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
                                 <span className="truncate">{s.uploaderName}</span>
-                                {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">★ الأفضل</span>}
+                                {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">{t.player.bestMatch}</span>}
                                 {s.source && <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${s.source === 'subdl' ? 'bg-blue-500/20 text-blue-400' : s.source === 'opensubtitles' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>{s.source === 'subdl' ? 'SubDL' : s.source === 'opensubtitles' ? 'OS' : 'Stremio'}</span>}
                               </span>
                               <span className="text-[10px] text-[#555] flex-shrink-0">
@@ -655,7 +684,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
                       initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
                       className="absolute right-0 top-12 w-64 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10"
                     >
-                      <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">Available Streams</div>
+                      <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">{t.player.availableStreams}</div>
                       {streams.map((s, i) => (
                         <button
                           key={i}
@@ -695,18 +724,18 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
               <div className="bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-16 z-20 relative">
                 {/* Progress bar */}
                 <div className="group relative mb-3">
-                  {/* Hover tooltip */}
-                  {hoverTime !== null && (
-                    <div className="absolute bottom-8 px-2 py-1 bg-black/90 rounded text-xs text-white pointer-events-none transform -translate-x-1/2 z-10" style={{ left: hoverX }}>
-                      {formatTime(hoverTime)}
-                    </div>
-                  )}
+                  {/* Hover tooltip — updated via DOM ref, no setState */}
+                  <div
+                    ref={hoverTooltipRef}
+                    className="absolute bottom-8 px-2 py-1 bg-black/90 rounded text-xs text-white pointer-events-none transform -translate-x-1/2 z-10"
+                    style={{ display: 'none' }}
+                  />
                   <div
                     ref={progressBarRef}
                     className="relative w-full h-1 group-hover:h-2 bg-white/20 rounded-full cursor-pointer transition-all duration-200"
                     onClick={handleProgressClick}
                     onMouseMove={handleProgressHover}
-                    onMouseLeave={() => setHoverTime(null)}
+                    onMouseLeave={handleProgressLeave}
                   >
                     {/* Buffered */}
                     <div className="absolute top-0 left-0 h-full bg-white/30 rounded-full pointer-events-none" style={{ width: `${bufPct}%` }} />

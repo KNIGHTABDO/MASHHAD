@@ -5,20 +5,24 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 
 export function SplashScreen() {
-  const [visible, setVisible] = useState(true)
+  // null = not yet decided (avoid flash), true = show, false = hide
+  const [visible, setVisible] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Check if we've already shown the splash this session
     if (sessionStorage.getItem('mashhad-splash-shown')) {
       setVisible(false)
       return
     }
+    setVisible(true)
     const timer = setTimeout(() => {
       setVisible(false)
       sessionStorage.setItem('mashhad-splash-shown', '1')
     }, 2200)
     return () => clearTimeout(timer)
   }, [])
+
+  // Render nothing until we've decided (avoids the 1-frame flash on return visits)
+  if (visible === null) return null
 
   return (
     <AnimatePresence>

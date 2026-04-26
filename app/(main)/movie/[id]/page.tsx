@@ -122,7 +122,7 @@ export default async function MovieDetailPage({ params }: Props) {
               {/* Directors */}
               {directors.length > 0 && (
                 <p className="text-sm text-[#B3B3B3] mb-6">
-                  <span className="text-white font-medium">{lang === 'ar' ? 'الإخراج: ' : 'Director: '}</span>
+                  <span className="text-white font-medium">{t.content.director}: </span>
                   {directors.map(d => d.name).join('، ')}
                 </p>
               )}
@@ -143,7 +143,7 @@ export default async function MovieDetailPage({ params }: Props) {
           {/* Cast */}
           {cast.length > 0 && (
             <section className="mt-8 pb-16">
-              <h2 className="text-xl font-bold mb-6">{lang === 'ar' ? 'الممثلون' : 'Cast'}</h2>
+              <h2 className="text-xl font-bold mb-6">{t.content.cast}</h2>
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
                 {cast.map(member => (
                   <div key={member.id} className="text-center">
