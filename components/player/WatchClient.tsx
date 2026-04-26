@@ -491,7 +491,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     <div
       ref={containerRef}
       dir="ltr"
-      className={`relative bg-black flex-1 flex flex-col select-none ${isFullscreen ? 'h-screen' : 'h-[100vh]'}`}
+      className={`relative bg-black flex-1 flex flex-col select-none ${isFullscreen ? 'h-screen' : 'h-[100dvh]'} overflow-hidden`}
       onMouseMove={showControls}
       onTouchStart={showControls}
       style={{ cursor: controlsVisible ? 'default' : 'none' }}
