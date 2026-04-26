@@ -133,16 +133,16 @@ export default async function SeriesDetailPage({ params }: Props) {
               <h2 className="text-xl font-bold mb-6">{t.content.cast}</h2>
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
                 {cast.map(member => (
-                  <div key={member.id} className="text-center">
-                    <div className="relative aspect-square rounded-xl overflow-hidden bg-[#141414] mb-2">
+                  <Link href={`/person/${member.id}`} key={member.id} className="text-center group block">
+                    <div className="relative aspect-square rounded-xl overflow-hidden bg-[#141414] mb-2 group-hover:ring-2 ring-[#E50914] transition-all">
                       {member.profile_path ? (
-                        <Image src={getTMDBImageUrl(member.profile_path, 'w300')} alt={member.name} fill className="object-cover" sizes="80px" />
+                        <Image src={getTMDBImageUrl(member.profile_path, 'w300')} alt={member.name} fill className="object-cover group-hover:scale-105 transition-transform" sizes="80px" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-2xl text-[#444]">👤</div>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">{member.name}</p>
-                  </div>
+                    <p className="text-xs font-medium truncate group-hover:text-white transition-colors">{member.name}</p>
+                  </Link>
                 ))}
               </div>
             </section>

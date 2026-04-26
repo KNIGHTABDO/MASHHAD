@@ -224,13 +224,17 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 - **Progress bar:** `onMouseMove` uses `requestAnimationFrame` + direct DOM writes via refs — zero `setState` per pixel
 - **Splash screen:** State initialized as `null` (not `true`) so nothing renders until `useEffect` checks `sessionStorage`
 
+### Algorithmic Recommendations & Downloads
+- **Recommendations:** `<RecommendedRow>` fetches `watch_history` to find the last watched item, then proxies a request to `/api/tmdb/{type}/{id}/recommendations` to render a personalized "Because you watched..." row.
+- **Offline Downloads:** `<DownloadButton>` triggers the same stream resolution pipeline but filters for `isRealDebrid && type === 'mp4'`. It presents a dropdown menu of qualities, and `window.open` is used to trigger native browser downloads for the direct MKV/MP4 URLs.
+
 ---
 
 ## Database Schema (Supabase)
 
 All tables have Row-Level Security (RLS) enabled with `(SELECT auth.uid())` for optimal query performance:
 
-- **`profiles`** — Netflix-style profiles (name, avatar_color, is_kids, language, maturity_level)
+- **`profiles`** — Netflix-style profiles (name, avatar_color, is_kids, language, maturity_level, role)
 - **`watch_history`** — Progress tracking (content_id, content_type, season/episode, progress_seconds, duration_seconds, completed)
 - **`watchlist`** — Saved content (content_id, content_type)
 - **`ratings`** — User ratings (content_id, rating 1-10)

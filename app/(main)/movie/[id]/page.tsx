@@ -7,6 +7,7 @@ import { tmdb } from '@/lib/tmdb/client'
 import { getTMDBImageUrl, formatYear, formatRuntime, formatRating } from '@/lib/utils/format'
 import { getServerT } from '@/lib/i18n/server'
 import { WatchlistButton } from '@/components/content/WatchlistButton'
+import { DownloadButton } from '@/components/content/DownloadButton'
 import type { Movie } from '@/types/content'
 
 interface Props {
@@ -128,13 +129,14 @@ export default async function MovieDetailPage({ params }: Props) {
               )}
 
               {/* CTAs */}
-              <div className="flex items-center gap-4 mb-10">
+              <div className="flex flex-wrap items-center gap-4 mb-10">
                 <Link
                   href={`/watch/${movie.id}?type=movie`}
                   className="flex items-center gap-2 bg-white text-black font-bold px-8 py-3.5 rounded-xl hover:bg-white/90 transition-all hover:scale-[1.02]"
                 >
                   ▶ {progress > 30 ? (lang === 'ar' ? 'استئناف' : 'Resume') : t.content.watchNow}
                 </Link>
+                <DownloadButton tmdbId={String(movie.id)} type="movie" />
                 <WatchlistButton contentId={String(movie.id)} contentType="movie" />
               </div>
             </div>
@@ -146,23 +148,23 @@ export default async function MovieDetailPage({ params }: Props) {
               <h2 className="text-xl font-bold mb-6">{t.content.cast}</h2>
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4">
                 {cast.map(member => (
-                  <div key={member.id} className="text-center">
-                    <div className="relative aspect-square rounded-xl overflow-hidden bg-[#141414] mb-2">
+                  <Link href={`/person/${member.id}`} key={member.id} className="text-center group block">
+                    <div className="relative aspect-square rounded-xl overflow-hidden bg-[#141414] mb-2 group-hover:ring-2 ring-[#E50914] transition-all">
                       {member.profile_path ? (
                         <Image
                           src={getTMDBImageUrl(member.profile_path, 'w300')}
                           alt={member.name}
                           fill
-                          className="object-cover"
+                          className="object-cover group-hover:scale-105 transition-transform"
                           sizes="80px"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-2xl text-[#444]">👤</div>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">{member.name}</p>
+                    <p className="text-xs font-medium truncate group-hover:text-white transition-colors">{member.name}</p>
                     <p className="text-xs text-[#666] truncate">{member.character}</p>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </section>

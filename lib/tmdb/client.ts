@@ -35,6 +35,10 @@ export const tmdb = {
   season: (seriesId: string, season: number) =>
     tmdbFetch(`/tv/${seriesId}/season/${season}`),
 
+  person: (id: string) =>
+    tmdbFetch(`/person/${id}?append_to_response=combined_credits`),
+
+
   search: (query: string) =>
     tmdbFetch(`/search/multi?query=${encodeURIComponent(query)}`, 300),
 

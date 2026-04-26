@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { getTMDBImageUrl } from '@/lib/utils/format'
 import { useT } from '@/lib/i18n/context'
+import { ContentRow } from './ContentRow'
 
 interface WatchItem {
   content_id: string
@@ -212,4 +213,70 @@ export function MyListRow() {
       </div>
     </section>
   )
+}
+
+export function RecommendedRow() {
+  const [items, setItems] = useState<TMDBItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [basedOnTitle, setBasedOnTitle] = useState('')
+  const [mediaType, setMediaType] = useState<'movie' | 'tv'>('movie')
+  const { t, lang } = useT()
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/continue-watching')
+        const data = await res.json()
+        const recentItem = data.items?.find((i: WatchItem) => i.progress_seconds > 0)
+        
+        if (!recentItem) {
+          setLoading(false)
+          return
+        }
+
+        const type = recentItem.content_type === 'episode' ? 'tv' : 'movie'
+        setMediaType(type)
+        
+        // Fetch the title of the watched item
+        const detailRes = await fetch(`/api/tmdb/detail?id=${recentItem.content_id}&type=${type}&lang=${lang}`)
+        const detail = await detailRes.json()
+        if (detail.title || detail.name) {
+          setBasedOnTitle(detail.title || detail.name)
+        }
+
+        // Fetch recommendations via TMDB proxy
+        const recRes = await fetch(`/api/tmdb/${type}/${recentItem.content_id}/recommendations?lang=${lang}`)
+        const recData = await recRes.json()
+        
+        if (recData.results && recData.results.length > 0) {
+          // Filter to items with posters
+          setItems(recData.results.filter((i: TMDBItem) => i.poster_path).slice(0, 20))
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [lang])
+
+  if (!loading && items.length === 0) return null
+
+  const rowTitle = basedOnTitle ? `${t.content.becauseYouWatched || 'Because you watched'} ${basedOnTitle}` : (t.content.recommended || 'Recommended for You')
+
+  if (loading) {
+    return (
+      <section className="px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1400px] mx-auto">
+          <h2 className="text-lg font-bold text-[#B3B3B3] mb-4">{t.content.loading}</h2>
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide py-4 -my-4" style={{ overflowY: 'clip' }}>
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  return <ContentRow title={rowTitle} items={items as any} variant="standard" mediaType={mediaType} />
 }

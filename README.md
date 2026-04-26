@@ -30,6 +30,13 @@ A premium Arabic-first streaming platform that aggregates movies and TV series f
 - RTL/LTR layout adaptation on `<html>` element
 - Complete i18n — zero hardcoded UI strings
 
+### 🌟 New Premium Features
+- **Algorithmic Recommendations** — Dynamic "Because you watched..." rows driven by profile watch history.
+- **Offline Downloads** — One-click direct MKV/MP4 downloads with a quality selector.
+- **Anime Dedicated Section** — A bespoke `/anime` hub aggregating trending, top-rated, and newly released Japanese animation.
+- **Actor & Director Profiles** — Rich biographies and "Known For" filmographies via TMDB.
+- **Admin Dashboard** — Secure, role-based analytics portal.
+
 ### 📺 Smart Playback
 - **Continue Watching** — Supabase-synced every 5s, survives stream switches, works for both movies and TV episodes
 - **Skip Intro / Outro** — IntroDB segment detection

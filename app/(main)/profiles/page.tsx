@@ -24,7 +24,9 @@ export default function ProfilesPage() {
 
   async function loadProfiles() {
     const supabase = createClient()
-    const { data } = await supabase.from('profiles').select('*').order('created_at')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('profiles').select('*').eq('user_id', user.id).order('created_at')
     setProfiles(data || [])
     setLoading(false)
   }

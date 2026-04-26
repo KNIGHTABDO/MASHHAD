@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getTMDBImageUrl } from '@/lib/utils/format'
 import { useT } from '@/lib/i18n/context'
 import type { Season } from '@/types/content'
+import { DownloadButton } from './DownloadButton'
 
 interface EpisodeListProps {
   seriesId: string
@@ -116,6 +117,15 @@ function SeasonEpisodes({ seriesId, seasonNumber }: { seriesId: string; seasonNu
             <p className="text-xs text-[#666] line-clamp-2 leading-relaxed">
               {ep.overview || (lang === 'ar' ? 'لا يوجد وصف.' : 'No description.')}
             </p>
+          </div>
+          <div className="flex-shrink-0 relative z-10 px-2" onClick={e => e.preventDefault()}>
+            <DownloadButton 
+              tmdbId={seriesId} 
+              type="episode" 
+              season={seasonNumber} 
+              episode={ep.episode_number} 
+              variant="icon" 
+            />
           </div>
         </Link>
       ))}

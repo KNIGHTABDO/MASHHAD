@@ -115,3 +115,18 @@ export interface ContentCard {
   mediaType: ContentType
   overview: string
 }
+
+export interface Person {
+  id: number
+  name: string
+  biography: string
+  profile_path: string | null
+  birthday: string | null
+  deathday: string | null
+  place_of_birth: string | null
+  known_for_department: string
+  combined_credits?: {
+    cast: (Movie & { media_type: 'movie' } | TVShow & { media_type: 'tv' })[]
+    crew: (Movie & { media_type: 'movie' } | TVShow & { media_type: 'tv' })[]
+  }
+}

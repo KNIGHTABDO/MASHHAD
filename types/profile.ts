@@ -10,6 +10,7 @@ export interface Profile {
   auto_play_next: boolean
   auto_skip_intro: boolean
   subtitle_language: string
+  role?: 'admin' | 'user'
   created_at: string
   updated_at: string
 }

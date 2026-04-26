@@ -364,9 +364,15 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     if (previousStreamIndex.current !== currentStreamIndex) {
       previousStreamIndex.current = currentStreamIndex
       hasResumed.current = false // Allow seeking to lastKnownTime on new stream
-      setIsChangingStream(true)  // Show spinner until canplay fires
+      
+      const cs = streams[currentStreamIndex]
+      if (cs?.type === 'embed') {
+        setIsChangingStream(false) // Iframes don't fire canplay, hide immediately
+      } else {
+        setIsChangingStream(true)  // Show spinner until canplay fires
+      }
     }
-  }, [currentStreamIndex])
+  }, [currentStreamIndex, streams])
 
   // --- Resume playback ---
   useEffect(() => {

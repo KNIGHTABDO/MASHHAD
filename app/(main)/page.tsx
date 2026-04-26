@@ -1,7 +1,7 @@
 import { tmdb } from '@/lib/tmdb/client'
 import { HeroSection } from '@/components/content/HeroSection'
 import { ContentRow } from '@/components/content/ContentRow'
-import { ContinueWatchingRow, MyListRow } from '@/components/content/PersonalRows'
+import { ContinueWatchingRow, MyListRow, RecommendedRow } from '@/components/content/PersonalRows'
 import { getServerT } from '@/lib/i18n/server'
 import { Suspense } from 'react'
 import { RowSkeleton } from '@/components/ui/RowSkeleton'
@@ -73,6 +73,7 @@ export default async function HomePage() {
         {/* Personal rows (client-side, profile-aware) */}
         <ContinueWatchingRow />
         <MyListRow />
+        <RecommendedRow />
 
         <Suspense fallback={<RowSkeleton />}>
           <ContentRow title={t.content.topTen} items={trending} variant="numbered" mediaType="movie" />

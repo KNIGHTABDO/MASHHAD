@@ -24,8 +24,12 @@ export function Navbar() {
     { href: '/', label: t.nav.home },
     { href: '/movies', label: t.nav.movies },
     { href: '/series', label: t.nav.series },
+    { href: '/anime', label: t.nav.anime },
     { href: '/search', label: t.nav.search },
   ]
+  if (activeProfile?.role === 'admin') {
+    navLinks.push({ href: '/admin', label: t.nav.admin })
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
