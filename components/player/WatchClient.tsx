@@ -36,7 +36,7 @@ interface Segments {
 
 export function WatchClient({ contentId, type, season, episode, profileId, initialProgress }: WatchClientProps) {
   const router = useRouter()
-  const { t } = useT()
+  const { t, lang } = useT()
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
