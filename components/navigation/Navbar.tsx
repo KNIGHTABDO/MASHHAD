@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
@@ -66,9 +67,8 @@ export function Navbar() {
         <div className="flex items-center justify-between h-16 gap-4">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-2xl font-black text-white tracking-tight">مشهد</span>
-            <div className="w-2 h-2 rounded-full bg-[#E50914]" />
+          <Link href="/" className="flex items-center flex-shrink-0">
+            <Image src="/logo.png" alt="مشهد" width={80} height={80} className="h-9 w-auto" priority />
           </Link>
 
           {/* Nav Links */}

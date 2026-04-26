@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useT } from '@/lib/i18n/context'
 
 export function Footer() {
@@ -18,9 +19,8 @@ export function Footer() {
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-black text-white tracking-tight">مشهد</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-[#E50914]" />
+          <div className="flex items-center">
+            <Image src="/logo.png" alt="مشهد" width={80} height={80} className="h-8 w-auto" />
           </div>
 
           {/* Links */}

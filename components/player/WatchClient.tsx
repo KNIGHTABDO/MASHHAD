@@ -499,10 +499,12 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       {/* Loading */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-[#B3B3B3]">جاري البحث عن روابط المشاهدة...</p>
-            <p className="text-[#444] text-sm mt-1">قد يستغرق هذا بضع ثوانٍ</p>
+          <div className="text-center flex flex-col items-center gap-5">
+            <img src="/logo.png" alt="مشهد" className="w-24 h-24 animate-pulse" />
+            <div className="w-32 h-[2px] bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full h-full bg-gradient-to-r from-transparent via-[#E50914] to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
+            </div>
+            <p className="text-[#666] text-sm">جاري البحث عن روابط المشاهدة...</p>
           </div>
         </div>
       )}
