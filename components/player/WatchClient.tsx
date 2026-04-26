@@ -524,7 +524,6 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
           className="absolute inset-0 w-full h-full border-0 bg-black z-10"
           allowFullScreen
           referrerPolicy="origin"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
         />
       ) : (
         <video ref={videoRef} className="w-full h-full object-contain bg-black" onError={tryNextStream} playsInline controls={false}>
