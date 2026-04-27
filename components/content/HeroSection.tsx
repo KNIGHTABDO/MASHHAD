@@ -24,9 +24,10 @@ interface HeroItem {
 
 interface HeroSectionProps {
   items: HeroItem[]
+  mediaType?: 'movie' | 'tv'
 }
 
-export function HeroSection({ items }: HeroSectionProps) {
+export function HeroSection({ items, mediaType: defaultMediaType }: HeroSectionProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
   const { t, lang } = useT()
@@ -58,8 +59,12 @@ export function HeroSection({ items }: HeroSectionProps) {
   const item = validItems[currentIndex]
   const title = item.title || item.name || ''
   const year = formatYear(item.release_date || item.first_air_date || '')
-  const mediaType = item.media_type === 'tv' ? 'series' : 'movie'
-  const detailUrl = `/${mediaType}/${item.id}`
+  
+  // Robust media type detection
+  const resolvedMediaType = item.media_type || defaultMediaType || (item.first_air_date ? 'tv' : 'movie')
+  const typeKey = resolvedMediaType === 'tv' ? 'series' : 'movie'
+  const detailUrl = `/${typeKey}/${item.id}`
+  const watchUrl = `/watch/${item.id}?type=${resolvedMediaType === 'tv' ? 'tv' : 'movie'}`
 
   return (
     <div
@@ -106,7 +111,7 @@ export function HeroSection({ items }: HeroSectionProps) {
                 <span className="text-[#F5A623] text-sm font-medium">★ {formatRating(item.vote_average)}</span>
                 <span className="text-[#666] text-sm">•</span>
                 <span className="text-[#B3B3B3] text-sm">{year}</span>
-                {mediaType === 'series' && (
+                {resolvedMediaType === 'tv' && (
                   <>
                     <span className="text-[#666] text-sm">•</span>
                     {/* Use i18n instead of hardcoded language ternary */}
@@ -128,7 +133,7 @@ export function HeroSection({ items }: HeroSectionProps) {
               {/* CTAs */}
               <div className="flex items-center gap-4">
                 <Link
-                  href={`/watch/${item.id}?type=${mediaType}`}
+                  href={watchUrl}
                   className="flex items-center gap-2 bg-white text-black font-bold px-8 py-3.5 rounded-xl hover:bg-white/90 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                 >
                   <PlayIcon />

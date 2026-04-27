@@ -43,7 +43,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   const syncTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const progressBarRef = useRef<HTMLDivElement>(null)
   const hasResumed = useRef(false)
-  const hlsRef = useRef<any>(null)
+  const hlsRef = useRef<import('hls.js').default | null>(null)
   const trackRef = useRef<HTMLTrackElement>(null)
   const subtitleBlobUrl = useRef<string | null>(null)
   const playPromiseRef = useRef<Promise<void> | null>(null)
@@ -99,6 +99,12 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   const [showNextEpisodeBtn, setShowNextEpisodeBtn] = useState(false)
   const [isEnded, setIsEnded] = useState(false)
   const [isChangingStream, setIsChangingStream] = useState(false)
+  const [isBuffering, setIsBuffering] = useState(false)
+  const [hlsLevels, setHlsLevels] = useState<{ id: number, label: string }[]>([])
+  const [currentLevel, setCurrentLevel] = useState<number>(-1) // -1 is auto
+  const [showLevelMenu, setShowLevelMenu] = useState(false)
+  const [isScrubbing, setIsScrubbing] = useState(false)
+  const [lastFallbackError, setLastFallbackError] = useState<string | null>(null)
 
   // Refs for progress bar hover — avoids 2 setState calls per mousemove pixel
   const hoverIndicatorRef = useRef<HTMLDivElement>(null)
@@ -339,11 +345,36 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     if (cs.type === 'hls' && cs.url.includes('.m3u8')) {
       import('hls.js').then(({ default: Hls }) => {
         if (Hls.isSupported()) {
-          const hls = new Hls({ enableWorker: true })
+          const hls = new Hls({ 
+            enableWorker: true,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            startLevel: -1,
+            abandonNextLevelRetry: 3,
+            fragLoadingMaxRetry: 5,
+          })
           hls.loadSource(cs.url)
           hls.attachMedia(video)
-          hls.on(Hls.Events.MANIFEST_PARSED, () => safePlay())
-          hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) tryNextStream() })
+          
+          hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+            const levels = data.levels.map((l, i) => ({
+              id: i,
+              label: l.height ? `${l.height}p` : `Level ${i}`
+            })).reverse()
+            setHlsLevels(levels)
+            safePlay()
+          })
+
+          hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+            setCurrentLevel(hls.autoLevelEnabled ? -1 : data.level)
+          })
+
+          hls.on(Hls.Events.ERROR, (_, d) => { 
+            if (d.fatal) {
+              setLastFallbackError(`Error: ${d.type} - switching...`)
+              tryNextStream() 
+            }
+          })
           hlsRef.current = hls
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = cs.url
@@ -419,18 +450,28 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     const onPlay = () => setIsPlaying(true)
     const onPause = () => { setIsPlaying(false); syncProgress() }
     const onEnded = () => setIsEnded(true)
+    const onWaiting = () => setIsBuffering(true)
+    const onPlaying = () => { setIsBuffering(false); setIsPlaying(true) }
+    const onStalled = () => setIsBuffering(true)
+
     video.addEventListener('timeupdate', onTime)
     video.addEventListener('durationchange', onDur)
     video.addEventListener('progress', onBuf)
-    video.addEventListener('playing', onPlay)
+    video.addEventListener('playing', onPlaying)
+    video.addEventListener('play', onPlay)
     video.addEventListener('pause', onPause)
+    video.addEventListener('waiting', onWaiting)
+    video.addEventListener('stalled', onStalled)
     video.addEventListener('ended', onEnded)
     return () => {
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('durationchange', onDur)
       video.removeEventListener('progress', onBuf)
-      video.removeEventListener('playing', onPlay)
+      video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('play', onPlay)
       video.removeEventListener('pause', onPause)
+      video.removeEventListener('waiting', onWaiting)
+      video.removeEventListener('stalled', onStalled)
       video.removeEventListener('ended', onEnded)
     }
   }, [isSeeking, syncProgress, segments])
@@ -469,7 +510,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [showControls, setVolume])
+  }, [showControls, setVolume, safeToggle])
 
   useEffect(() => {
     const cb = () => setIsFullscreen(!!document.fullscreenElement)
@@ -483,6 +524,23 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     if (!rect || !videoRef.current) return
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     videoRef.current.currentTime = pct * duration
+    setCurrentTime(pct * duration)
+  }
+
+  const handleProgressMouseDown = () => setIsScrubbing(true)
+  const handleProgressMouseUp = () => setIsScrubbing(false)
+
+  const handleProgressMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = progressBarRef.current?.getBoundingClientRect()
+    if (!rect || !videoRef.current) return
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    
+    if (isScrubbing) {
+      videoRef.current.currentTime = pct * duration
+      setCurrentTime(pct * duration)
+    }
+
+    handleProgressHover(e)
   }
 
   // RAF-based progress bar hover — no setState per mousemove pixel
@@ -540,9 +598,29 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       {/* Stream-switching spinner (when user picks a different server) */}
       {isChangingStream && !loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20 pointer-events-none">
-          <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-[#E50914] animate-spin" />
+          <div className="text-center flex flex-col items-center gap-4">
+            <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-[#E50914] animate-spin" />
+            {lastFallbackError && <p className="text-xs text-[#666] animate-pulse">{lastFallbackError}</p>}
+          </div>
         </div>
       )}
+
+      {/* Buffering spinner */}
+      {isBuffering && !isChangingStream && isPlaying && !loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-transparent z-10 pointer-events-none">
+           <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-[#E50914] animate-spin shadow-2xl" />
+        </div>
+      )}
+
+      {/* Double tap to seek (Visual indicators) */}
+      <div className="absolute inset-0 flex z-0 pointer-events-none overflow-hidden">
+        <div className="flex-1 h-full flex items-center justify-center opacity-0 hover:opacity-10 transition-opacity" onDoubleClick={() => { if (videoRef.current) videoRef.current.currentTime -= 10 }}>
+          <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center text-black text-2xl font-bold">-10s</div>
+        </div>
+        <div className="flex-1 h-full flex items-center justify-center opacity-0 hover:opacity-10 transition-opacity" onDoubleClick={() => { if (videoRef.current) videoRef.current.currentTime += 10 }}>
+          <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center text-black text-2xl font-bold">+10s</div>
+        </div>
+      </div>
 
       {/* Error */}
       {error && !loading && (
@@ -627,52 +705,91 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
               <div className="flex-1" />
               {/* Subtitle selector (hide for embed) */}
               {cs?.type !== 'embed' && (
-                <div className="relative">
-                  <button
-                    onClick={() => { setSubtitleMenuOpen(s => !s); setServerMenuOpen(false) }}
-                    className={`px-4 py-2 rounded-full backdrop-blur-md text-sm hover:bg-white/20 transition-all flex items-center gap-2 ${activeSub ? 'bg-[#E50914]/30 text-white' : 'bg-white/10 text-white'}`}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 12h4m-2 3h6"/></svg>
-                    {activeSub ? 'العربية' : t.player.noSubtitles}
-                  </button>
-                  <AnimatePresence>
-                    {subtitleMenuOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                        className="absolute right-0 top-12 w-72 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10 max-h-80 overflow-y-auto"
+                <div className="flex items-center gap-2">
+                  {/* HLS Quality Selector */}
+                  {hlsLevels.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => { setShowLevelMenu(s => !s); setSubtitleMenuOpen(false); setServerMenuOpen(false) }}
+                        className="px-3 py-2 rounded-full backdrop-blur-md bg-white/10 text-white text-xs hover:bg-white/20 transition-all flex items-center gap-1.5"
                       >
-                        <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">الترجمة</div>
-                        <button
-                          onClick={() => { disableSubtitles(); setSubtitleMenuOpen(false) }}
-                          className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center gap-2 ${!activeSub ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
-                        >
-                          {!activeSub && <span className="w-2 h-2 rounded-full bg-[#E50914]" />}
-                          بدون ترجمة
-                        </button>
-                        {subsLoading && <div className="px-4 py-3 text-sm text-[#666]">جاري البحث...</div>}
-                        {subtitles.map((s, i) => (
-                          <button
-                            key={s.fileId}
-                            onClick={() => { loadSubtitle(s); setSubtitleMenuOpen(false) }}
-                            className={`w-full text-left px-4 py-2.5 text-sm transition-all ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20M2 12l5-5m0 10l-5-5m20 0l-5-5m0 10l5-5"/></svg>
+                        {currentLevel === -1 ? 'Auto' : hlsLevels.find(l => l.id === currentLevel)?.label || 'Auto'}
+                      </button>
+                      <AnimatePresence>
+                        {showLevelMenu && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                            className="absolute right-0 top-12 w-32 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10"
                           >
-                            <span className="flex items-center justify-between gap-2">
-                              <span className="flex items-center gap-2 min-w-0">
-                                {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
-                                <span className="truncate">{s.uploaderName}</span>
-                                {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">{t.player.bestMatch}</span>}
-                                {s.source && <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${s.source === 'subdl' ? 'bg-blue-500/20 text-blue-400' : s.source === 'opensubtitles' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>{s.source === 'subdl' ? 'SubDL' : s.source === 'opensubtitles' ? 'OS' : 'Stremio'}</span>}
-                              </span>
-                              <span className="text-[10px] text-[#555] flex-shrink-0">
-                                {s.syncScore != null && s.syncScore > 0 ? `⚡${s.syncScore}` : `⬇${s.downloadCount}`}
-                              </span>
-                            </span>
-                            {s.fileName && <p className="text-[10px] text-[#444] truncate mt-0.5 ml-4">{s.fileName.replace(/\.[^.]+$/, '').substring(0, 50)}</p>}
+                            <button
+                              onClick={() => { if (hlsRef.current) hlsRef.current.currentLevel = -1; setShowLevelMenu(false) }}
+                              className={`w-full text-left px-4 py-2.5 text-xs transition-all ${currentLevel === -1 ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                            >
+                              Auto
+                            </button>
+                            {hlsLevels.map(level => (
+                              <button
+                                key={level.id}
+                                onClick={() => { if (hlsRef.current) hlsRef.current.currentLevel = level.id; setShowLevelMenu(false) }}
+                                className={`w-full text-left px-4 py-2.5 text-xs transition-all ${currentLevel === level.id ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                              >
+                                {level.label}
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <button
+                      onClick={() => { setSubtitleMenuOpen(s => !s); setServerMenuOpen(false); setShowLevelMenu(false) }}
+                      className={`px-4 py-2 rounded-full backdrop-blur-md text-sm hover:bg-white/20 transition-all flex items-center gap-2 ${activeSub ? 'bg-[#E50914]/30 text-white' : 'bg-white/10 text-white'}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 12h4m-2 3h6"/></svg>
+                      {activeSub ? 'العربية' : t.player.noSubtitles}
+                    </button>
+                    <AnimatePresence>
+                      {subtitleMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          className="absolute right-0 top-12 w-72 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10 max-h-80 overflow-y-auto"
+                        >
+                          <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">الترجمة</div>
+                          <button
+                            onClick={() => { disableSubtitles(); setSubtitleMenuOpen(false) }}
+                            className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center gap-2 ${!activeSub ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                          >
+                            {!activeSub && <span className="w-2 h-2 rounded-full bg-[#E50914]" />}
+                            بدون ترجمة
                           </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                          {subsLoading && <div className="px-4 py-3 text-sm text-[#666]">جاري البحث...</div>}
+                          {subtitles.map((s, i) => (
+                            <button
+                              key={s.fileId}
+                              onClick={() => { loadSubtitle(s); setSubtitleMenuOpen(false) }}
+                              className={`w-full text-left px-4 py-2.5 text-sm transition-all ${activeSub?.fileId === s.fileId ? 'bg-[#E50914]/20 text-white' : 'text-[#B3B3B3] hover:bg-white/5 hover:text-white'}`}
+                            >
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  {activeSub?.fileId === s.fileId && <span className="w-2 h-2 rounded-full bg-[#E50914] flex-shrink-0" />}
+                                  <span className="truncate">{s.uploaderName}</span>
+                                  {i === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E50914]/30 text-[#E50914] flex-shrink-0">{t.player.bestMatch}</span>}
+                                  {s.source && <span className={`text-[9px] px-1 py-0.5 rounded flex-shrink-0 ${s.source === 'subdl' ? 'bg-blue-500/20 text-blue-400' : s.source === 'opensubtitles' ? 'bg-green-500/20 text-green-400' : 'bg-purple-500/20 text-purple-400'}`}>{s.source === 'subdl' ? 'SubDL' : s.source === 'opensubtitles' ? 'OS' : 'Stremio'}</span>}
+                                </span>
+                                <span className="text-[10px] text-[#555] flex-shrink-0">
+                                  {s.syncScore != null && s.syncScore > 0 ? `⚡${s.syncScore}` : `⬇${s.downloadCount}`}
+                                </span>
+                              </span>
+                              {s.fileName && <p className="text-[10px] text-[#444] truncate mt-0.5 ml-4">{s.fileName.replace(/\.[^.]+$/, '').substring(0, 50)}</p>}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               )}
               {/* Server selector */}
@@ -740,7 +857,9 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
                     ref={progressBarRef}
                     className="relative w-full h-1 group-hover:h-2 bg-white/20 rounded-full cursor-pointer transition-all duration-200"
                     onClick={handleProgressClick}
-                    onMouseMove={handleProgressHover}
+                    onMouseDown={handleProgressMouseDown}
+                    onMouseUp={handleProgressMouseUp}
+                    onMouseMove={handleProgressMouseMove}
                     onMouseLeave={handleProgressLeave}
                   >
                     {/* Buffered */}

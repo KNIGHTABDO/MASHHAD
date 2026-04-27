@@ -25,90 +25,105 @@ interface ContentRowProps {
 
 export function ContentRow({ title, items, variant, mediaType }: ContentRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(true)
+  const [canScrollStart, setCanScrollStart] = useState(false)
+  const [canScrollEnd, setCanScrollEnd] = useState(true)
   const rafRef = useRef<number | null>(null)
 
-  if (!items.length) return null
-
-  function scroll(dir: 'left' | 'right') {
-    const el = scrollRef.current
-    if (!el) return
-    const amount = el.clientWidth * 0.8
-    el.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' })
-  }
-
-  // Debounce scroll state updates via requestAnimationFrame to prevent
-  // 12 synchronous re-renders per scroll tick across 6 rows
   const onScroll = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(() => {
       const el = scrollRef.current
       if (!el) return
-      setCanScrollLeft(el.scrollLeft > 10)
-      setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 10)
+      const isRTL = document.documentElement.dir === 'rtl'
+      
+      if (isRTL) {
+        // In RTL, scrollLeft is 0 at the start and negative as you scroll "forward" (physically left)
+        setCanScrollStart(el.scrollLeft < -10)
+        setCanScrollEnd(el.scrollLeft > -(el.scrollWidth - el.clientWidth - 10))
+      } else {
+        setCanScrollStart(el.scrollLeft > 10)
+        setCanScrollEnd(el.scrollLeft < el.scrollWidth - el.clientWidth - 10)
+      }
     })
   }, [])
+
+  if (!items.length) return null
+
+  function scroll(dir: 'start' | 'end') {
+    const el = scrollRef.current
+    if (!el) return
+    const amount = el.clientWidth * 0.8
+    // In RTL, scrollLeft is negative or zero, but scrollBy handles it correctly
+    el.scrollBy({ left: dir === 'start' ? -amount : amount, behavior: 'smooth' })
+  }
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
+        delayChildren: 0.1
+      }
+    }
+  }
 
   const cardWidth = variant === 'large' ? 'w-72 flex-shrink-0' : variant === 'numbered' ? 'w-44 flex-shrink-0' : 'w-40 flex-shrink-0'
 
   return (
     <section className="px-4 sm:px-6 lg:px-8 group/row">
       <div className="max-w-[1400px] mx-auto">
-        {/* Row header */}
         <div className="flex items-center justify-between mb-4">
           <motion.h2
             initial={{ opacity: 0, x: -10 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="text-lg font-bold text-white"
+            className="text-lg font-bold text-white border-r-4 border-[#E50914] pr-3"
           >
             {title}
           </motion.h2>
         </div>
 
-        {/* Scroll container */}
         <div className="relative">
-          {/* Left arrow */}
-          {canScrollLeft && (
+          {/* Back Arrow (Start) */}
+          {canScrollStart && (
             <button
-              onClick={() => scroll('left')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-full bg-gradient-to-l from-[#0A0A0A] to-transparent flex items-center justify-end pr-2 opacity-0 group-hover/row:opacity-100 transition-opacity"
+              onClick={() => scroll('start')}
+              className="absolute inset-y-0 start-0 z-10 w-12 flex items-center justify-start opacity-0 group-hover/row:opacity-100 transition-all duration-300 bg-gradient-to-e from-[#0A0A0A] to-transparent"
             >
-              <div className="w-8 h-8 rounded-full glass flex items-center justify-center text-white hover:scale-110 transition-transform">
-                ‹
+              <div className="w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:scale-110 hover:bg-white/20 transition-all ml-1 shadow-lg">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="rtl:rotate-180"><path d="M15 18l-6-6 6-6"/></svg>
               </div>
             </button>
           )}
 
-          {/* Right arrow */}
-          {canScrollRight && (
+          {/* Forward Arrow (End) */}
+          {canScrollEnd && (
             <button
-              onClick={() => scroll('right')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-full bg-gradient-to-r from-[#0A0A0A] to-transparent flex items-center justify-start pl-2 opacity-0 group-hover/row:opacity-100 transition-opacity"
+              onClick={() => scroll('end')}
+              className="absolute inset-y-0 end-0 z-10 w-12 flex items-center justify-end opacity-0 group-hover/row:opacity-100 transition-all duration-300 bg-gradient-to-s from-[#0A0A0A] to-transparent"
             >
-              <div className="w-8 h-8 rounded-full glass flex items-center justify-center text-white hover:scale-110 transition-transform">
-                ›
+              <div className="w-9 h-9 rounded-full glass flex items-center justify-center text-white hover:scale-110 hover:bg-white/20 transition-all mr-1 shadow-lg">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="rtl:rotate-180"><path d="M9 18l6-6-6-6"/></svg>
               </div>
             </button>
           )}
 
-          {/* Mobile: fade-out edge hint so users know there's more content */}
-          <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0A0A0A] to-transparent pointer-events-none z-[5] md:hidden" />
-
-          <div
+          <motion.div
             ref={scrollRef}
             onScroll={onScroll}
-            className="flex gap-3 overflow-x-auto scrollbar-hide py-4 -my-4"
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "100px" }}
+            className="flex gap-4 overflow-x-auto scrollbar-hide py-20 -my-20"
             style={{
               transform: 'translateZ(0)',
-              // overflow-y: clip preserves the GPU compositor layer
-              // (overflow-y: visible defeats translateZ(0) promotion)
-              overflowY: 'clip',
+              scrollSnapType: 'x mandatory'
             }}
           >
             {items.map((item, index) => (
-              <div key={item.id} className={`${cardWidth} flex-shrink-0`}>
+              <div key={item.id} className={`${cardWidth} flex-shrink-0 scroll-snap-align-start`}>
                 <ContentCard
                   item={item}
                   mediaType={mediaType}
@@ -117,7 +132,7 @@ export function ContentRow({ title, items, variant, mediaType }: ContentRowProps
                 />
               </div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>
