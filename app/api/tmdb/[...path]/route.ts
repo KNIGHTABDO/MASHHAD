@@ -16,22 +16,26 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  // Auth check — prevents unauthenticated users from burning our TMDB quota
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  } catch {
-    return NextResponse.json({ error: 'Auth error' }, { status: 401 })
-  }
-
   const { path } = await params
+  const tmdbPath = path.join('/')
+
+  // Auth check — prevents unauthenticated users from burning our TMDB quota
+  // Bypass auth for trending content (used on landing page)
+  const isPublicPath = tmdbPath.startsWith('trending/')
+  
+  if (!isPublicPath) {
+    try {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+    } catch {
+      return NextResponse.json({ error: 'Auth error' }, { status: 401 })
+    }
+  }
   const { searchParams } = new URL(request.url)
   const TMDB_KEY = process.env.TMDB_API_KEY
-
-  const tmdbPath = path.join('/')
 
   // Path allowlist check
   if (!isAllowedPath(tmdbPath)) {

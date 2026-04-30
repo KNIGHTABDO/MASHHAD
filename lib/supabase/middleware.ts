@@ -27,12 +27,25 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone()
   const isAuthPage = url.pathname.startsWith('/login') || url.pathname.startsWith('/register')
+  const isLandingPage = url.pathname === '/landing'
   const isPublicPath = url.pathname.startsWith('/_next') || url.pathname.startsWith('/fonts') || url.pathname.includes('favicon')
+  // The trending API endpoint is public so the landing page can show real posters
+  const isTrendingApi = url.pathname.startsWith('/api/tmdb/trending')
 
-  if (isPublicPath) return supabaseResponse
+  if (isPublicPath || isTrendingApi) return supabaseResponse
 
+  // Landing page is public — anyone can view it
+  if (isLandingPage && !user) return supabaseResponse
+
+  // Authenticated user hitting /landing → send to app
+  if (isLandingPage && user) {
+    url.pathname = '/profiles'
+    return NextResponse.redirect(url)
+  }
+
+  // Unauthenticated user anywhere else → send to /landing
   if (!user && !isAuthPage) {
-    url.pathname = '/login'
+    url.pathname = '/landing'
     return NextResponse.redirect(url)
   }
 
@@ -44,7 +57,7 @@ export async function updateSession(request: NextRequest) {
   // Check if user has selected a profile
   const activeProfileId = request.cookies.get('active_profile_id')?.value
   const isProfilePage = url.pathname.startsWith('/profiles') || url.pathname.startsWith('/api/')
-  
+
   if (user && !isAuthPage && !isProfilePage && !activeProfileId) {
     url.pathname = '/profiles'
     return NextResponse.redirect(url)

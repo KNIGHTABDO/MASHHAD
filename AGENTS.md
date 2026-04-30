@@ -2,6 +2,10 @@
 
 > Arabic-first streaming platform for movies & TV series. Next.js 15, Supabase, Real-Debrid, multi-source subtitles.
 
+**Live:** `mashhad-web.vercel.app` | **Repo:** `github.com/KNIGHTABDO/MASHHAD`
+
+> ⚠️ Mashhad does NOT host any media content — it is an aggregation interface only.
+
 ---
 
 ## Project Overview
@@ -167,8 +171,13 @@ mashhad/
 ├── next.config.ts                      # Security headers + image remotePatterns
 └── public/
     ├── logo.png                        # Brand logo (transparent background)
+    ├── landing/                        # Landing page media (hero-scroll-opt.mp4, feature bg PNGs)
     └── fonts/                          # Thmanyah Sans woff2 (300, 400, 500, 700, 900)
 ```
+
+### New Route Groups
+- **`app/(landing)/landing/page.tsx`** — Public cinematic landing page. No auth required. Uses real TMDB trending posters fetched client-side. Fully mobile-responsive. Contains `HeroSection` (scroll-scrubbed video), animated stats counters, `TiltCard` 3D poster grid, feature sections, and CTA.
+- **`app/(main)/anime/page.tsx`** — Dedicated anime section using TMDB discover with `with_genres=16` (Animation) and `with_origin_country=JP`.
 
 ---
 
@@ -228,7 +237,27 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 - **Recommendations:** `<RecommendedRow>` fetches `watch_history` to find the last watched item, then proxies a request to `/api/tmdb/{type}/{id}/recommendations` to render a personalized "Because you watched..." row.
 - **Offline Downloads:** `<DownloadButton>` triggers the same stream resolution pipeline but filters for `isRealDebrid && type === 'mp4'`. It presents a dropdown menu of qualities, and `window.open` is used to trigger native browser downloads for the direct MKV/MP4 URLs.
 
----
+### Landing Page Pattern
+The landing page at `/landing` is **fully public** — no Supabase session required.
+
+- **TMDB trending posters** — fetched client-side from `/api/tmdb/trending/movie/week` which is exempt from auth in both the API route and the middleware.
+- **Middleware bypass** — `lib/supabase/middleware.ts` has `isTrendingApi` check: any request to `/api/tmdb/trending` skips the session redirect.
+- **API route bypass** — `app/api/tmdb/[...path]/route.ts` has `isPublicPath` check: `trending/` paths skip `supabase.auth.getUser()`.
+- **Scroll-scrubbing hero** — `HeroSection` uses a sticky container (`height: 280vh`) with a `<video>` whose `currentTime` is driven directly from scroll position via `requestAnimationFrame` — **no React state involved**.
+- **3D tilt cards** — `TiltCard` uses Framer Motion `useMotionValue` + `useSpring` for rotateX/Y. On mobile, `onMouseMove` still works via touch (or defaults to flat if not triggered).
+- **Mobile animations** — All Framer Motion entry animations in the landing page use `y`-axis (`initial={{ y: 20 }}`) not `x`-axis to prevent horizontal overflow scroll on mobile.
+
+### Middleware Public Path Rules
+The middleware (`lib/supabase/middleware.ts`) bypasses auth redirect for:
+1. `/_next/**` — Next.js static chunks
+2. `/fonts/**` — Local font files
+3. `**/favicon**` — Favicon
+4. `/landing` — The landing page itself
+5. `/api/tmdb/trending/**` — Trending content for landing page posters ← **added**
+6. `/login`, `/register` — Auth pages (handled separately)
+
+**Do NOT remove item 5** — removing it causes `/api/tmdb/trending` to return an HTML redirect page instead of JSON for unauthenticated visitors, breaking the landing page poster fetch with `SyntaxError: Unexpected token '<'`.
+
 
 ## Database Schema (Supabase)
 
@@ -292,6 +321,16 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 - Skeleton loading: `.skeleton` class
 - Primary colors: `#0A0A0A` (bg), `#141414` (cards), `#E50914` (accent red), `#B3B3B3` (secondary text)
 
+### Mobile Responsiveness Rules
+- Use `sm:` prefix for 640px+, `md:` for 768px+
+- **Never use fixed px padding** on full-width sections — always `px-5 md:px-12` or similar
+- **Font sizing pattern:** `text-2xl md:text-5xl` — always define a base mobile size
+- **Framer Motion animations on mobile:** Use `y`-axis (`initial={{ y: 20 }}`) for entry animations, never `x`-axis on elements that go near the viewport edge — `x` animations cause horizontal scroll on iOS
+- **Button sizing:** `px-3 py-1.5 md:px-5 md:py-2` — mobile buttons must have touch-friendly tap targets (min 44px)
+- **Grid gaps:** `gap-2 md:gap-3` on poster grids, `gap-8 md:gap-16` on feature sections
+- **Vertical section padding:** `py-14 md:py-24` or `py-16 md:py-28` — never bare `py-40` without a mobile override
+- **Footer links:** always `flex-wrap justify-center` on mobile
+
 ### API Routes
 - TMDB proxy reads `mashhad-lang` cookie OR `?lang=` query param
 - All sensitive routes must call `supabase.auth.getUser()` and return 401 on failure
@@ -313,6 +352,8 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 8. **RealDebrid filename:** `unrestrict.filename` must be stored in `StreamResult.fileName` for subtitle sync scoring
 9. **overflow-y on scroll containers:** Must be `clip` not `visible` — `visible` defeats `translateZ(0)` GPU promotion
 10. **`useState<boolean | null>(null)` in SplashScreen** — do not change to `useState(true)` or you get the 1-frame flash
+11. **Trending API public bypass** — `lib/supabase/middleware.ts` must keep `isTrendingApi` check; removing it causes the landing page poster fetch to receive an HTML redirect and throw `SyntaxError: Unexpected token '<'`
+12. **Landing page x-axis animations** — Do NOT use `initial={{ x: N }}` in landing page feature sections; use `y`-axis only to prevent mobile horizontal overflow
 
 ### Font
 - **Thmanyah Sans** — loaded via `next/font/local` in `app/layout.tsx`
