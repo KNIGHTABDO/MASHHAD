@@ -278,5 +278,6 @@ export function RecommendedRow() {
     )
   }
 
+  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
   return <ContentRow title={rowTitle} items={items as any} variant="standard" mediaType={mediaType} />
 }

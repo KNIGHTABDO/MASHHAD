@@ -71,7 +71,50 @@ interface RDFiles {
   selected: number;
 }
 
-async function resolveMagnet(magnet: string, token: string): Promise<StreamResult[]> {
+/**
+ * Select the best video file from a torrent's file list.
+ * For episodes: matches S{season}E{episode} patterns in filenames.
+ * For movies or no match: falls back to largest file.
+ */
+function selectBestFile(
+  files: RDFiles[],
+  type: 'movie' | 'episode',
+  season?: number,
+  episode?: number,
+): { file: RDFiles; totalVideoFiles: number; matchedByEpisode: boolean } {
+  const videoFiles = (files || []).filter((f) =>
+    f.path.match(/\.(mkv|mp4|avi|mov|m4v|webm)$/i)
+  )
+  if (videoFiles.length === 0) return { file: files[0], totalVideoFiles: 0, matchedByEpisode: false }
+  if (videoFiles.length === 1) return { file: videoFiles[0], totalVideoFiles: 1, matchedByEpisode: false }
+
+  // For episodes, try to match the specific episode by SxxEyy pattern
+  if (type === 'episode' && season != null && episode != null) {
+    const patterns = [
+      new RegExp(`[Ss]0*${season}[Ee]0*${episode}(?![0-9])`),
+      new RegExp(`0*${season}[xX]0*${episode}(?![0-9])`),
+      new RegExp(`(?<![0-9])0*${season}00*${episode}(?![0-9])`),
+    ]
+    for (const re of patterns) {
+      const matched = videoFiles.find((f) => re.test(f.path))
+      if (matched) {
+        return { file: matched, totalVideoFiles: videoFiles.length, matchedByEpisode: true }
+      }
+    }
+  }
+
+  // Fallback: largest file is usually the main feature
+  videoFiles.sort((a, b) => b.bytes - a.bytes)
+  return { file: videoFiles[0], totalVideoFiles: videoFiles.length, matchedByEpisode: false }
+}
+
+async function resolveMagnet(
+  magnet: string,
+  token: string,
+  type: 'movie' | 'episode',
+  season?: number,
+  episode?: number,
+): Promise<StreamResult[]> {
   try {
     const addRes = await fetch(`${RD_BASE}/torrents/addMagnet`, {
       method: 'POST',
@@ -93,23 +136,23 @@ async function resolveMagnet(magnet: string, token: string): Promise<StreamResul
     const info = await infoRes.json()
 
     if (!info.links || info.links.length === 0) {
-      const videoFiles = (info.files || []).filter((f: RDFiles) => 
-        f.path.match(/\.(mkv|mp4|avi|mov|m4v|webm)$/i)
+      // No links yet — need to select files first
+      const { file: bestFile } = selectBestFile(
+        info.files || [], type, season, episode
       )
-      if (videoFiles.length === 0) return []
-      videoFiles.sort((a: RDFiles, b: RDFiles) => b.bytes - a.bytes)
-      
+      if (!bestFile) return []
+
       await fetch(`${RD_BASE}/torrents/selectFiles/${torrentId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `files=${videoFiles[0].id}`,
+        body: `files=${bestFile.id}`,
         signal: AbortSignal.timeout(5000),
       })
 
-      // Wait a tiny bit for links to populate
+      // Wait a moment for links to populate
       await new Promise(r => setTimeout(r, 500))
     }
 
@@ -120,9 +163,19 @@ async function resolveMagnet(magnet: string, token: string): Promise<StreamResul
     const info2 = await info2Res.json()
     if (!info2.links || info2.links.length === 0) return []
 
-    const videoLink = info2.links.find((l: string) =>
-      l.match(/\.(mkv|mp4|avi|mov|m4v)(\?|$)/i)
-    ) || info2.links[0]
+    // For episodes, try to find the link matching the selected file
+    let videoLink: string
+    if (type === 'episode' && info2.links.length > 1 && season && episode) {
+      const epPattern = new RegExp(`[Ss]0*${season}[Ee]0*${episode}`, 'i')
+      const matchedLink = info2.links.find((l: string) => epPattern.test(l))
+      videoLink = matchedLink || info2.links.find((l: string) =>
+        l.match(/\.(mkv|mp4|avi|mov|m4v)(\?|$)/i)
+      ) || info2.links[0]
+    } else {
+      videoLink = info2.links.find((l: string) =>
+        l.match(/\.(mkv|mp4|avi|mov|m4v)(\?|$)/i)
+      ) || info2.links[0]
+    }
 
     const unrestrictRes = await fetch(`${RD_BASE}/unrestrict/link`, {
       method: 'POST',
@@ -193,7 +246,7 @@ export const realDebridAdapter: ServerAdapter = {
       if (!magnets.length) return []
 
       const results = await Promise.all(
-        magnets.slice(0, 3).map(m => resolveMagnet(m, token))
+        magnets.slice(0, 3).map(m => resolveMagnet(m, token, type, season, episode))
       )
       return results.flat()
     } catch (err) {

@@ -11,6 +11,20 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   // Enable DNS prefetch for performance
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
+  // Content Security Policy — allow embeds from streaming providers
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' https://image.tmdb.org https://*.gravatar.com data:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://api.themoviedb.org https://api.real-debrid.com https://*.supabase.co https://api.opensubtitles.com https://api.subdl.com https://*.strem.io",
+      "frame-src 'self' https://vidsrc.me https://vidbom.com https://*.vidbom.com https://*.dood.la https://*.dood.stream https://streamwish.com https://*.streamwish.com https://filemoon.sx https://*.filemoon.sx https://*.fasselhd.com",
+      "media-src 'self' blob: https:",
+    ].join('; '),
+  },
 ]
 
 const nextConfig: NextConfig = {
@@ -40,12 +54,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: ['localhost:3000', 'mashhad-web.vercel.app'],
     },
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
   },
 }
 

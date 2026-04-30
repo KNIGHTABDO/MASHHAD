@@ -88,7 +88,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   const [duration, setDuration] = useState(0)
   const [buffered, setBuffered] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [isSeeking, setIsSeeking] = useState(false)
+  // isScrubbing used for progress bar interaction (isSeeking alias removed)
 
   const [subtitles, setSubtitles] = useState<Subtitle[]>([])
   const [activeSub, setActiveSub] = useState<Subtitle | null>(null)
@@ -200,14 +200,15 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       .catch(() => {})
   }, [contentId, type, season, episode])
 
+  // Derive current stream's filename outside the effect to stabilize the dependency
+  const currentFileName = streams[currentStreamIndex]?.fileName || ''
+
   // --- Fetch subtitles (default: Arabic) ---
   useEffect(() => {
     async function fetchSubs() {
       setSubsLoading(true)
       try {
-        // Use the actual video filename for subtitle-to-stream release matching
-        const cs = streams[currentStreamIndex]
-        const streamFile = cs?.fileName || ''
+        const streamFile = currentFileName
 
         const params = new URLSearchParams({
           tmdbId: contentId,
@@ -232,11 +233,13 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       }
     }
     fetchSubs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentId, type, season, episode, streams, currentStreamIndex])
+  }, [contentId, type, season, episode, currentStreamIndex, currentFileName])
+
+  // User-adjustable subtitle offset (ms), persisted per session
+  const manualOffsetMs = useRef(0)
 
   // --- Load a subtitle into the video track ---
-  async function loadSubtitle(sub: Subtitle) {
+  async function loadSubtitle(sub: Subtitle, extraOffsetMs?: number) {
     try {
       const res = await fetch('/api/subtitles/search', {
         method: 'POST',
@@ -246,10 +249,21 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       const data = await res.json()
       if (!data.vttContent) return
 
+      // Apply community-recommended offset + any manual user adjustment
+      const communityOffset = sub.recommendedOffsetMs || 0
+      const manual = extraOffsetMs ?? manualOffsetMs.current
+      const totalOffset = communityOffset + manual
+
+      let vttContent = data.vttContent
+      if (totalOffset !== 0) {
+        const { applyVttOffset } = await import('@/lib/subtitles/offset')
+        vttContent = applyVttOffset(vttContent, totalOffset)
+      }
+
       // Revoke old blob
       if (subtitleBlobUrl.current) URL.revokeObjectURL(subtitleBlobUrl.current)
 
-      const blob = new Blob([data.vttContent], { type: 'text/vtt' })
+      const blob = new Blob([vttContent], { type: 'text/vtt' })
       const url = URL.createObjectURL(blob)
       subtitleBlobUrl.current = url
 
@@ -280,6 +294,23 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     }
   }
 
+  // Adjust manual offset and reload current subtitle
+  const adjustSubtitleOffset = useCallback((deltaMs: number) => {
+    manualOffsetMs.current += deltaMs
+    if (activeSub) loadSubtitle(activeSub)
+    // Optionally save to server
+    if (activeSub?.fileId) {
+      fetch('/api/subtitles/sync-vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtitle_file_id: activeSub.fileId,
+          offset_ms: manualOffsetMs.current,
+        }),
+      }).catch(() => {})
+    }
+  }, [activeSub])
+
   function disableSubtitles() {
     const video = videoRef.current
     if (video) {
@@ -298,38 +329,39 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
   }, [syncProgress])
 
   // --- Fetch streams ---
-  useEffect(() => {
-    async function fetchStreams() {
-      setLoading(true)
-      setError(null)
-      try {
-        const params = new URLSearchParams({
-          tmdbId: contentId,
-          type: type === 'movie' ? 'movie' : 'episode',
-          ...(season && { season: season.toString() }),
-          ...(episode && { episode: episode.toString() }),
-        })
-        const res = await fetch(`/api/stream/resolve?${params}`)
-        const data = await res.json()
-        if (data.streams?.length > 0) {
-          setStreams(data.streams)
-          const directIdx = data.streams.findIndex((s: StreamResult) => s.label?.includes('Direct'))
-          if (directIdx >= 0) {
-            setCurrentStreamIndex(directIdx)
-          } else {
-            setCurrentStreamIndex(0)
-          }
+  const fetchStreams = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({
+        tmdbId: contentId,
+        type: type === 'movie' ? 'movie' : 'episode',
+        ...(season && { season: season.toString() }),
+        ...(episode && { episode: episode.toString() }),
+      })
+      const res = await fetch(`/api/stream/resolve?${params}`)
+      const data = await res.json()
+      if (data.streams?.length > 0) {
+        setStreams(data.streams)
+        const directIdx = data.streams.findIndex((s: StreamResult) => s.label?.includes('Direct'))
+        if (directIdx >= 0) {
+          setCurrentStreamIndex(directIdx)
         } else {
-          setError(t.errors.noStreams)
+          setCurrentStreamIndex(0)
         }
-      } catch {
-        setError(t.errors.streamFailed)
-      } finally {
-        setLoading(false)
+      } else {
+        setError(t.errors.noStreams)
       }
+    } catch {
+      setError(t.errors.streamFailed)
+    } finally {
+      setLoading(false)
     }
-    fetchStreams()
   }, [contentId, type, season, episode, t])
+
+  useEffect(() => {
+    fetchStreams()
+  }, [fetchStreams])
 
   // --- Load video source ---
   useEffect(() => {
@@ -425,7 +457,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     const video = videoRef.current
     if (!video) return
     const onTime = () => { 
-      if (!isSeeking) {
+      if (!isScrubbing) {
         setCurrentTime(video.currentTime)
         if (video.currentTime > 0) lastKnownTime.current = video.currentTime
         
@@ -474,7 +506,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       video.removeEventListener('stalled', onStalled)
       video.removeEventListener('ended', onEnded)
     }
-  }, [isSeeking, syncProgress, segments])
+  }, [isScrubbing, syncProgress, segments])
 
   function tryNextStream() {
     if (currentStreamIndex < streams.length - 1) setCurrentStreamIndex(i => i + 1)
@@ -502,15 +534,17 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
         case 'ArrowUp': e.preventDefault(); video.volume = Math.min(1, video.volume + 0.1); setVolume(video.volume); break
         case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, video.volume - 0.1); setVolume(video.volume); break
         case 'KeyF':
-          document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()
+          if (document.fullscreenElement) { document.exitFullscreen() } else { containerRef.current?.requestFullscreen() }
           break
         case 'KeyM': video.muted = !video.muted; break
+        case 'KeyJ': adjustSubtitleOffset(-250); break // shift subs earlier
+        case 'KeyK': adjustSubtitleOffset(250); break // shift subs later
       }
       showControls()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [showControls, setVolume, safeToggle])
+  }, [showControls, setVolume, safeToggle, adjustSubtitleOffset])
 
   useEffect(() => {
     const cb = () => setIsFullscreen(!!document.fullscreenElement)
@@ -534,7 +568,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
     const rect = progressBarRef.current?.getBoundingClientRect()
     if (!rect || !videoRef.current) return
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    
+
     if (isScrubbing) {
       videoRef.current.currentTime = pct * duration
       setCurrentTime(pct * duration)
@@ -629,7 +663,12 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
             <div className="text-5xl mb-4">😔</div>
             <h2 className="text-xl font-bold mb-2">{t.player.failedToLoad}</h2>
             <p className="text-[#B3B3B3] mb-6">{error}</p>
-            <button onClick={() => router.back()} className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 transition-colors">{t.player.goBack}</button>
+            <div className="flex gap-4 justify-center">
+              <button onClick={() => fetchStreams()} className="px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 transition-colors">
+                {lang === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+              </button>
+              <button onClick={() => router.back()} className="px-6 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-colors">{t.player.goBack}</button>
+            </div>
           </div>
         </div>
       )}

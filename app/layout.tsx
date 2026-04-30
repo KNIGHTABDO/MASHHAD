@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
 import './globals.css'
 import { Providers } from '@/components/Providers'
@@ -14,6 +14,12 @@ const thmanyah = localFont({
   variable: '--font-thmanyah',
   display: 'swap',
 })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0A0A0A',
+}
 
 export const metadata: Metadata = {
   title: 'مشهد — منصة المحتوى العربي',
@@ -40,6 +46,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className={thmanyah.variable}>
+      <head>
+        <link rel="preconnect" href="https://api.themoviedb.org" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://image.tmdb.org" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://api.real-debrid.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://vidsrc.me" />
+        <link rel="dns-prefetch" href="https://api.opensubtitles.com" />
+        <link rel="dns-prefetch" href="https://api.subdl.com" />
+        <link rel="manifest" href="/manifest.json" />
+      </head>
       <body className="bg-[#0A0A0A] text-white antialiased font-[family-name:var(--font-thmanyah)]">
         <Providers>{children}</Providers>
       </body>

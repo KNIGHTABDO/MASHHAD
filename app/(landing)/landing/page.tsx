@@ -363,6 +363,7 @@ export default function LandingPage() {
         const res = await fetch(`/api/tmdb/trending/movie/week?lang=${lang}`)
         if (!res.ok) return
         const data = await res.json()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const trending = data.results.slice(0, 6).map((m: any) => ({
           id: m.id,
           title: m.title || m.name,

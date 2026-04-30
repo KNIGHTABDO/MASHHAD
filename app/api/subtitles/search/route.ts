@@ -63,6 +63,16 @@ function normalizeFilename(fn: string): string {
     .replace(/\.[^.]+$/, '')         // remove extension
     .replace(/[._\-\[\](){}]/g, ' ') // normalize separators
     .replace(/\s+/g, ' ')
+    .replace(/\bweb\s+dl\b/g, 'web-dl')  // normalize "web dl" -> "web-dl"
+    .replace(/\bwebdl\b/g, 'web-dl')     // normalize "webdl" -> "web-dl"
+    .replace(/\bbluray\b/g, 'bluray')
+    .replace(/\bbdrip\b/g, 'bdrip')
+    .replace(/\bbrrip\b/g, 'brrip')
+    .replace(/\bwebrip\b/g, 'webrip')
+    .replace(/\bhdrip\b/g, 'hdrip')
+    .replace(/\bhdtv\b/g, 'hdtv')
+    .replace(/\bdvdrip\b/g, 'dvdrip')
+    .replace(/\bweb\s*dl\b/g, 'web-dl')   // catch "web-dl", "web  dl" etc
     .trim()
 }
 
@@ -116,12 +126,12 @@ function scoreSub(sub: RawSubtitle, streamFileName: string): number {
   let score = 0
   const subName = sub.fileName || sub.releaseName || ''
 
-  // If no stream filename, we can't do release matching — just use metadata
+  // If no stream filename, we can't do release matching — rely on metadata
   if (!streamFileName) {
-    // Only metadata-based scoring
     if (sub.isHearingImpaired) score += SCORE.HI_PENALTY
     if (sub.isMachineTranslated) score += SCORE.MACHINE_TRANSLATED
-    const dlScore = Math.min(Math.floor((sub.downloadCount || 0) / 1000), SCORE.DOWNLOAD_CAP)
+    // Use magnified download count: every 100 downloads = 1 point (was per 1000)
+    const dlScore = Math.min(Math.floor((sub.downloadCount || 0) / 100), 10)
     score += dlScore
     if (sub.rating > 0) score += Math.round(sub.rating * SCORE.RATING_MULTIPLIER)
     if (sub.source === 'subdl') score += SCORE.SOURCE_SUBDL
@@ -177,8 +187,8 @@ function scoreSub(sub: RawSubtitle, streamFileName: string): number {
 // ─── GET: Search subtitles ───
 export async function GET(request: Request) {
   // Auth check — prevents burning OpenSubtitles + SubDL quota for unauthenticated users
+  const supabase = await createClient()
   try {
-    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ subtitles: [] }, { status: 401 })
   } catch {
@@ -242,6 +252,31 @@ export async function GET(request: Request) {
       console.log(`[Subtitles] #${i + 1}: score=${s.syncScore} src=${s.source} file="${s.fileName?.substring(0, 60)}"`)
     })
 
+    // Batch-fetch community sync offsets for all subtitle file IDs
+    const fileIds = scored.slice(0, 25).map(s => s.id)
+    const offsetMap: Record<string, number> = {}
+    if (fileIds.length > 0) {
+      try {
+        const { data: votes } = await supabase
+          .from('subtitle_sync_votes')
+          .select('subtitle_file_id, offset_ms')
+          .in('subtitle_file_id', fileIds)
+        if (votes) {
+          const groups: Record<string, number[]> = {}
+          for (const v of votes) {
+            const key = v.subtitle_file_id
+            if (!groups[key]) groups[key] = []
+            groups[key].push(v.offset_ms)
+          }
+          for (const [key, offsets] of Object.entries(groups)) {
+            offsetMap[key] = Math.round(offsets.reduce((a, b) => a + b, 0) / offsets.length)
+          }
+        }
+      } catch {
+        // Silently ignore — offsets are optional
+      }
+    }
+
     const subtitles = scored.slice(0, 25).map(s => ({
       id: s.id,
       fileId: s.fileId,
@@ -252,6 +287,7 @@ export async function GET(request: Request) {
       uploaderName: s.uploaderName,
       syncScore: s.syncScore,
       source: s.source,
+      recommendedOffsetMs: offsetMap[s.id] || 0,
     }))
 
     // English fallback if no Arabic found
@@ -309,13 +345,14 @@ async function fetchStremio(
 
     // Stremio API returns ONLY: id, url, SubEncoding, lang, m, g
     // NO filename, NO download count, NO rating — we can't judge quality
-    return data.subtitles
-      .filter((s: any) => s.lang === langCode)
+    interface StremioSub { id: string; url: string; lang: string }
+    return (data.subtitles as StremioSub[])
+      .filter((s) => s.lang === langCode)
       .slice(0, 10)
-      .map((s: any) => ({
+      .map((s) => ({
         id: `stremio-${s.id}`,
         fileId: s.url,
-        fileName: '',  // Stremio provides NO filename
+        fileName: s.url ? s.url.split('/').pop()?.replace(/\.[^.]+$/, '') || '' : '',
         language,
         downloadCount: 0,   // Unknown
         rating: 0,          // Unknown
@@ -359,7 +396,20 @@ async function fetchOpenSubtitles(
     if (!res.ok) return []
     const data = await res.json()
 
-    return (data.data || []).slice(0, 20).map((item: any) => ({
+    interface OSItem {
+      id: string
+      attributes: {
+        files: { file_id: number; file_name: string }[]
+        release: string
+        language: string
+        download_count: number
+        ratings: number
+        uploader: { name: string }
+        hearing_impaired: boolean
+        machine_translated: boolean
+      }
+    }
+    return ((data.data || []) as OSItem[]).slice(0, 20).map((item) => ({
       id: `os-${item.id}`,
       fileId: item.attributes.files[0]?.file_id?.toString() || item.id,
       fileName: item.attributes.files[0]?.file_name || item.attributes.release || '',
@@ -405,9 +455,23 @@ async function fetchSubDL(
     const data = await res.json()
     if (!data.subtitles || !Array.isArray(data.subtitles)) return []
 
-    return data.subtitles.map((item: any) => ({
+    interface SubDLItem {
+      release_name: string
+      name: string
+      url: string
+      download_count: number
+      rating: number
+      author: string
+      hi: boolean
+      hearing_impaired: boolean
+      ai_translated: boolean
+      machine_translated: boolean
+    }
+    return (data.subtitles as SubDLItem[]).map((item) => ({
       id: `subdl-${item.release_name || item.name || Math.random()}`,
-      fileId: item.url ? `https://dl.subdl.com${item.url}` : '',
+      fileId: item.url
+        ? (item.url.startsWith('http') ? item.url : `https://dl.subdl.com${item.url}`)
+        : '',
       fileName: item.release_name || item.name || '',
       language,
       downloadCount: item.download_count || 0,
@@ -513,7 +577,7 @@ async function handleSubDLDownload(url: string): Promise<NextResponse> {
     }
 
     const rawContent = unzipped[target]
-    const content = decodeSubtitleBuffer(rawContent.buffer)
+    const content = decodeSubtitleBuffer(rawContent.buffer as ArrayBuffer)
 
     // If .ass, convert to SRT-like first
     const vttContent = target.toLowerCase().endsWith('.vtt')
@@ -575,8 +639,8 @@ function decodeSubtitleBuffer(buffer: ArrayBuffer): string {
   }
 
   // Try UTF-8 first
-  let content = new TextDecoder('utf-8').decode(buffer)
-  const badChars = (content.match(/\uFFFD/g) || []).length
+  const utf8Content = new TextDecoder('utf-8').decode(buffer)
+  const badChars = (utf8Content.match(/\uFFFD/g) || []).length
 
   // If many replacement chars, try Windows-1256 (Arabic)
   if (badChars > 5) {
@@ -589,7 +653,7 @@ function decodeSubtitleBuffer(buffer: ArrayBuffer): string {
     return new TextDecoder('iso-8859-1').decode(buffer)
   }
 
-  return content
+  return utf8Content
 }
 
 // ─── SRT to VTT converter ───

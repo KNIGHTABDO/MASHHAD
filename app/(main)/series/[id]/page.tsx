@@ -124,7 +124,7 @@ export default async function SeriesDetailPage({ params }: Props) {
 
           {/* Episodes */}
           {series.seasons && series.seasons.length > 0 && (
-            <EpisodeList seriesId={id} seasons={series.seasons.filter(s => s.season_number > 0)} />
+            <EpisodeList seriesId={id} seasons={series.seasons || []} />
           )}
 
           {/* Cast */}

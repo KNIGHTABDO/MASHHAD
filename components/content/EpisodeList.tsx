@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -15,8 +15,14 @@ interface EpisodeListProps {
 }
 
 export function EpisodeList({ seriesId, seasons }: EpisodeListProps) {
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.season_number ?? 1)
   const { t, lang } = useT()
+
+  const sortedSeasons = useMemo(
+    () => [...seasons].sort((a, b) => a.season_number - b.season_number),
+    [seasons]
+  )
+
+  const [selectedSeason, setSelectedSeason] = useState(sortedSeasons[0]?.season_number ?? 1)
 
   return (
     <section className="mt-8 pb-8">
@@ -24,7 +30,7 @@ export function EpisodeList({ seriesId, seasons }: EpisodeListProps) {
 
       {/* Season Tabs */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide mb-6 pb-2">
-        {seasons.map(season => (
+        {sortedSeasons.map(season => (
           <button
             key={season.season_number}
             onClick={() => setSelectedSeason(season.season_number)}
@@ -34,7 +40,10 @@ export function EpisodeList({ seriesId, seasons }: EpisodeListProps) {
                 : 'bg-[#1F1F1F] text-[#B3B3B3] hover:text-white hover:bg-[#2A2A2A]'
             }`}
           >
-            {t.content.season} {lang === 'ar' ? season.season_number.toLocaleString('ar-SA') : season.season_number}
+            {season.season_number === 0
+              ? (lang === 'ar' ? 'حلقات خاصة' : 'Specials')
+              : `${t.content.season} ${lang === 'ar' ? season.season_number.toLocaleString('ar-SA') : season.season_number}`
+            }
           </button>
         ))}
       </div>

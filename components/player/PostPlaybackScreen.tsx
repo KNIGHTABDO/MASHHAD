@@ -6,6 +6,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useT } from '@/lib/i18n/context'
 import { getTMDBImageUrl } from '@/lib/utils/format'
+import type { Movie, TVShow } from '@/types/content'
+type RecommendationItem = Movie | TVShow
 
 interface Props {
   type: 'movie' | 'tv'
@@ -16,10 +18,10 @@ interface Props {
 }
 
 export function PostPlaybackScreen({ type, seriesId, currentSeason, currentEpisode, autoPlayNext }: Props) {
-  const { t, lang } = useT()
+  const { lang } = useT()
   const router = useRouter()
   const [countdown, setCountdown] = useState(10)
-  const [recommendations, setRecommendations] = useState<any[]>([])
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([])
   const [nextEpisodeData, setNextEpisodeData] = useState<{ season: number, episode: number } | null>(null)
   const [isLoadingNext, setIsLoadingNext] = useState(type === 'tv')
   
@@ -77,8 +79,7 @@ export function PostPlaybackScreen({ type, seriesId, currentSeason, currentEpiso
   useEffect(() => {
     async function load() {
       try {
-        const id = seriesId || '' // need actual id for movies too, but we didn't pass it. Let's just fetch popular
-        // Fallback: just fetch trending or similar
+        // Fetch recommendations — use seriesId for TV, or just popular for movies
         const res = await fetch(`/api/tmdb/discover?type=${type}`)
         const data = await res.json()
         if (data.results) {
@@ -145,7 +146,7 @@ export function PostPlaybackScreen({ type, seriesId, currentSeason, currentEpiso
           >
             <Image
               src={getTMDBImageUrl(item.poster_path, 'w500')}
-              alt={item.title || item.name || ''}
+              alt={'title' in item ? item.title : item.name || ''}
               fill
               className="object-cover group-hover:scale-105 transition-transform duration-300"
             />
