@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePlayerStore } from '@/store/playerStore'
 import { useT } from '@/lib/i18n/context'
@@ -382,7 +383,6 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
             startLevel: -1,
-            abandonNextLevelRetry: 3,
             fragLoadingMaxRetry: 5,
           })
           hls.loadSource(cs.url)
@@ -620,7 +620,7 @@ export function WatchClient({ contentId, type, season, episode, profileId, initi
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
           <div className="text-center flex flex-col items-center gap-5">
-            <img src="/logo.png" alt="مشهد" className="w-24 h-24 animate-pulse" />
+            <Image src="/logo.png" alt="مشهد" width={96} height={96} className="w-24 h-24 animate-pulse" />
             <div className="w-32 h-[2px] bg-white/10 rounded-full overflow-hidden">
               <div className="w-full h-full bg-gradient-to-r from-transparent via-[#E50914] to-transparent animate-[shimmer_1.5s_ease-in-out_infinite]" />
             </div>

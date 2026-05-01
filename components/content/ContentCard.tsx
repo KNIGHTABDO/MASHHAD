@@ -18,6 +18,8 @@ interface ContentItem {
   first_air_date?: string
   vote_average: number
   overview: string
+  detailUrl?: string
+  watchUrl?: string
 }
 
 interface ContentCardProps {
@@ -37,8 +39,10 @@ export function ContentCard({ item, mediaType: propMediaType, variant, index = 0
   
   // Robust media type detection
   const mediaType = propMediaType || (item.first_air_date ? 'tv' : 'movie')
-  const detailUrl = `/${mediaType === 'tv' ? 'series' : 'movie'}/${item.id}`
-  const watchUrl = `/watch/${item.id}?type=${mediaType}`
+  const defaultDetailUrl = `/${mediaType === 'tv' ? 'series' : 'movie'}/${item.id}`
+  const defaultWatchUrl = `/watch/${item.id}?type=${mediaType}`
+  const detailUrl = item.detailUrl || defaultDetailUrl
+  const watchUrl = item.watchUrl || defaultWatchUrl
 
   const isLarge = variant === 'large'
   const imgPath = isLarge ? item.backdrop_path : item.poster_path

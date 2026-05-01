@@ -48,6 +48,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.gravatar.com',
       },
+      {
+        protocol: 'https',
+        hostname: 's4.anilist.co',
+      },
     ],
   },
   experimental: {

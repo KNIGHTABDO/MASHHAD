@@ -20,6 +20,8 @@ interface HeroItem {
   vote_average: number
   genre_ids: number[]
   media_type?: string
+  detailUrl?: string
+  watchUrl?: string
 }
 
 interface HeroSectionProps {
@@ -63,8 +65,10 @@ export function HeroSection({ items, mediaType: defaultMediaType }: HeroSectionP
   // Robust media type detection
   const resolvedMediaType = item.media_type || defaultMediaType || (item.first_air_date ? 'tv' : 'movie')
   const typeKey = resolvedMediaType === 'tv' ? 'series' : 'movie'
-  const detailUrl = `/${typeKey}/${item.id}`
-  const watchUrl = `/watch/${item.id}?type=${resolvedMediaType === 'tv' ? 'tv' : 'movie'}`
+  const defaultDetailUrl = `/${typeKey}/${item.id}`
+  const defaultWatchUrl = `/watch/${item.id}?type=${resolvedMediaType === 'tv' ? 'tv' : 'movie'}`
+  const detailUrl = item.detailUrl || defaultDetailUrl
+  const watchUrl = item.watchUrl || defaultWatchUrl
 
   return (
     <div

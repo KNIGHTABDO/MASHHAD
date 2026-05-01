@@ -14,6 +14,8 @@ interface ContentItem {
   first_air_date?: string
   vote_average: number
   overview: string
+  detailUrl?: string
+  watchUrl?: string
 }
 
 interface ContentRowProps {

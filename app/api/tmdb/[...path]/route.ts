@@ -55,6 +55,7 @@ export async function GET(
   queryParams.delete('lang') // Remove our custom param before forwarding to TMDB
   queryParams.set('language', tmdbLang)
   queryParams.set('api_key', TMDB_KEY!)
+  queryParams.set('_bust', '2') // Bust Next.js fetch cache
 
   // Search queries should not be cached as aggressively
   const isSearch = tmdbPath.includes('search')
@@ -65,6 +66,11 @@ export async function GET(
       { next: { revalidate: isSearch ? 300 : 3600 } }
     )
     const data = await res.json()
+    
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status })
+    }
+
     return NextResponse.json(data, {
       headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' },
     })
