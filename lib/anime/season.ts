@@ -91,7 +91,8 @@ export async function buildAnimeSeasonData(anilistId: number): Promise<AnimeSeas
   if (rootTmdbId) {
     const tmdbDetails = await getTmdbTvDetails(rootTmdbId)
     if (tmdbDetails && tmdbDetails.seasons) {
-      const tmdbSeasons = tmdbDetails.seasons.filter((s: any) => s.season_number > 0 && s.episode_count > 0)
+      interface TmdbSeasonLike { season_number: number; episode_count: number }
+      const tmdbSeasons = (tmdbDetails.seasons as TmdbSeasonLike[]).filter((s) => s.season_number > 0 && s.episode_count > 0)
       
       let currentTmdbIdx = 0
       let currentTmdbOffset = 0 // episodes used up in the current TMDB season
@@ -107,7 +108,7 @@ export async function buildAnimeSeasonData(anilistId: number): Promise<AnimeSeas
           return entry
         }
 
-        let tmdbS = tmdbSeasons[currentTmdbIdx]
+        const tmdbS = tmdbSeasons[currentTmdbIdx]
         entry.tmdbSeasonNumber = tmdbS.season_number
         entry.episodeOffset = currentTmdbOffset + 1
 

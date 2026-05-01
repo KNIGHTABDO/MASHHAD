@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   try {
     const data = await buildAnimeSeasonData(Number(id))
     return NextResponse.json(data)
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

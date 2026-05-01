@@ -3,46 +3,56 @@ import type { StreamResult, ServerAdapter } from '@/types/stream'
 // Simple in-memory cache for external IDs to avoid redundant TMDB API calls
 const extIdCache = new Map<string, string>()
 
-async function searchMagnets(tmdbId: string, type: 'movie' | 'episode', season?: number, episode?: number): Promise<string[]> {
+function isAnimeTitle(title: string): boolean {
+  const indicators = /\b(anime\b|season\d|shingeki|attack on titan|naruto|one piece|demon slayer|jujutsu|kaguya|hero academia|overlord|re:zero|tokyo ghoul|death note|fullmetal|gundam|sailor moon|dragon ball|boruto|black clover|fire force|vinland|made in abyss|promised neverland|one punch man|mob psycho|food wars|haikyuu|attack.titan|jjk)/i
+  return indicators.test(title)
+}
+
+async function searchMagnets(tmdbId: string, type: 'movie' | 'episode', season?: number, episode?: number): Promise<{ magnet: string; title: string }[]> {
   const cacheKey = `${type}-${tmdbId}`
   let imdbId = extIdCache.get(cacheKey)
 
   try {
     if (!imdbId) {
-      const tmdbApiUrl = type === 'movie' 
+      const tmdbApiUrl = type === 'movie'
         ? `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids?api_key=${process.env.TMDB_API_KEY}`
         : `https://api.themoviedb.org/3/tv/${tmdbId}/external_ids?api_key=${process.env.TMDB_API_KEY}`;
-      
+
       const extRes = await fetch(tmdbApiUrl, { signal: AbortSignal.timeout(5000) });
       if (!extRes.ok) return [];
       const extData = await extRes.json();
       imdbId = extData.imdb_id;
       if (imdbId) extIdCache.set(cacheKey, imdbId)
     }
-    
+
     if (!imdbId) return [];
 
     const typeStr = type === 'movie' ? 'movie' : 'series'
     const episodePart = type === 'episode' ? `:${season}:${episode}` : ''
     const stremioUrl = `https://torrentio.strem.fun/stream/${typeStr}/${imdbId}${episodePart}.json`
-    
+
     const res = await fetch(stremioUrl, { signal: AbortSignal.timeout(5000) })
     if (!res.ok) return []
     const data = await res.json()
-    
-    const magnets: string[] = []
-    
-    // Sort and filter streams to prefer browser-compatible formats
+
+    const magnets: { magnet: string; title: string }[] = []
+
+    // Detect anime content from any stream title for scoring
+    const anyAnime = (data.streams || []).some((s: { title?: string }) => isAnimeTitle(s.title || ''))
+
     const streams = (data.streams || []).sort((a: { title?: string }, b: { title?: string }) => {
       const aTitle = (a.title || '').toLowerCase()
       const bTitle = (b.title || '').toLowerCase()
-      
+
       const score = (t: string) => {
         let s = 0
         if (t.includes('x264') || t.includes('h264')) s += 50
         if (t.includes('mp4')) s += 40
         if (t.includes('1080p')) s += 30
-        if (t.includes('hevc') || t.includes('x265')) s -= 50
+
+        // Strongly penalize incompatible codecs
+        if (t.includes('hevc') || t.includes('x265')) s -= (anyAnime ? 200 : 100)
+        if (t.includes('10bit') || t.includes('10-bit') || t.includes('hi10p')) s -= (anyAnime ? 200 : 120)
         if (t.includes('remux') || t.includes('truehd')) s -= 40
         if (t.includes('dv') || t.includes('hdr')) s -= 30
         return s
@@ -53,7 +63,7 @@ async function searchMagnets(tmdbId: string, type: 'movie' | 'episode', season?:
     for (const stream of streams.slice(0, 4)) {
       if (stream.infoHash) {
         const magnet = `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodeURIComponent(stream.name || '')}`
-        magnets.push(magnet)
+        magnets.push({ magnet, title: stream.title || stream.name || '' })
       }
     }
     return magnets
@@ -71,11 +81,6 @@ interface RDFiles {
   selected: number;
 }
 
-/**
- * Select the best video file from a torrent's file list.
- * For episodes: matches S{season}E{episode} patterns in filenames.
- * For movies or no match: falls back to largest file.
- */
 function selectBestFile(
   files: RDFiles[],
   type: 'movie' | 'episode',
@@ -88,7 +93,6 @@ function selectBestFile(
   if (videoFiles.length === 0) return { file: files[0], totalVideoFiles: 0, matchedByEpisode: false }
   if (videoFiles.length === 1) return { file: videoFiles[0], totalVideoFiles: 1, matchedByEpisode: false }
 
-  // For episodes, try to match the specific episode by SxxEyy pattern
   if (type === 'episode' && season != null && episode != null) {
     const patterns = [
       new RegExp(`[Ss]0*${season}[Ee]0*${episode}(?![0-9])`),
@@ -103,13 +107,33 @@ function selectBestFile(
     }
   }
 
-  // Fallback: largest file is usually the main feature
   videoFiles.sort((a, b) => b.bytes - a.bytes)
   return { file: videoFiles[0], totalVideoFiles: videoFiles.length, matchedByEpisode: false }
 }
 
+export interface RDTranscodeResult {
+  apple: { full: string }
+  dash: { full: string }
+  liveMP4: { full: string }
+  h264WebM: { full: string }
+}
+
+async function fetchTranscode(fileId: string, token: string): Promise<RDTranscodeResult | null> {
+  try {
+    const res = await fetch(`${RD_BASE}/streaming/transcode/${fileId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    return await res.json() as RDTranscodeResult
+  } catch {
+    return null
+  }
+}
+
 async function resolveMagnet(
   magnet: string,
+  title: string,
   token: string,
   type: 'movie' | 'episode',
   season?: number,
@@ -136,7 +160,6 @@ async function resolveMagnet(
     const info = await infoRes.json()
 
     if (!info.links || info.links.length === 0) {
-      // No links yet — need to select files first
       const { file: bestFile } = selectBestFile(
         info.files || [], type, season, episode
       )
@@ -152,7 +175,6 @@ async function resolveMagnet(
         signal: AbortSignal.timeout(5000),
       })
 
-      // Wait a moment for links to populate
       await new Promise(r => setTimeout(r, 500))
     }
 
@@ -163,7 +185,6 @@ async function resolveMagnet(
     const info2 = await info2Res.json()
     if (!info2.links || info2.links.length === 0) return []
 
-    // For episodes, try to find the link matching the selected file
     let videoLink: string
     if (type === 'episode' && info2.links.length > 1 && season && episode) {
       const epPattern = new RegExp(`[Ss]0*${season}[Ee]0*${episode}`, 'i')
@@ -193,41 +214,87 @@ async function resolveMagnet(
 
     const quality = unrestricted.filename?.match(/(\d{3,4}p)/i)?.[1] || 'auto'
     const rdFileName = unrestricted.filename || ''
+    const rdFileId = unrestricted.id as string
     const results: StreamResult[] = []
 
-    // If streamable, get transcoded HLS stream
+    // If streamable, get ALL transcoded variants
     if (unrestricted.streamable === 1) {
-      try {
-        const streamRes = await fetch(`${RD_BASE}/streaming/transcode/${unrestricted.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-          signal: AbortSignal.timeout(5000),
-        })
-        if (streamRes.ok) {
-          const streamData = await streamRes.json()
-          if (streamData.apple?.full) {
-            results.push({
-              url: streamData.apple.full,
-              server: 'realdebrid',
-              type: 'hls',
-              isRealDebrid: true,
-              quality,
-              label: `RD (HLS) ${quality}`,
-              fileName: rdFileName,
-            })
-          }
+      const streamData = await fetchTranscode(rdFileId, token)
+      if (streamData) {
+        // liveMP4: best for mobile Safari and speed
+        if (streamData.liveMP4?.full) {
+          results.push({
+            url: streamData.liveMP4.full,
+            server: 'realdebrid',
+            type: 'mp4',
+            isRealDebrid: true,
+            quality,
+            label: `RD LiveMP4 ${quality}`,
+            fileName: rdFileName,
+            rdFileId,
+            rdTorrentId: torrentId,
+          })
         }
-      } catch {}
+        // Apple HLS: best for desktop adaptive quality
+        if (streamData.apple?.full) {
+          results.push({
+            url: streamData.apple.full,
+            server: 'realdebrid',
+            type: 'hls',
+            isRealDebrid: true,
+            quality,
+            label: `RD HLS ${quality}`,
+            fileName: rdFileName,
+            rdFileId,
+            rdTorrentId: torrentId,
+          })
+        }
+        // DASH: for Android
+        if (streamData.dash?.full) {
+          results.push({
+            url: streamData.dash.full,
+            server: 'realdebrid',
+            type: 'dash',
+            isRealDebrid: true,
+            quality,
+            label: `RD DASH ${quality}`,
+            fileName: rdFileName,
+            rdFileId,
+            rdTorrentId: torrentId,
+          })
+        }
+        // h264WebM: fallback for older browsers
+        if (streamData.h264WebM?.full) {
+          results.push({
+            url: streamData.h264WebM.full,
+            server: 'realdebrid',
+            type: 'mp4', // browser handles as generic
+            isRealDebrid: true,
+            quality,
+            label: `RD WebM ${quality}`,
+            fileName: rdFileName,
+            rdFileId,
+            rdTorrentId: torrentId,
+          })
+        }
+      }
     }
 
-    results.push({
-      url: unrestricted.download,
-      server: 'realdebrid',
-      type: unrestricted.download.includes('.m3u8') ? 'hls' : 'mp4',
-      isRealDebrid: true,
-      quality,
-      label: `RD Direct ${quality}`,
-      fileName: rdFileName,
-    })
+    // Raw download URL — only add if no transcodes available
+    // NEVER use for MKV on mobile; the transcode variants above handle all cases
+    if (results.length === 0) {
+      results.push({
+        url: unrestricted.download,
+        server: 'realdebrid',
+        type: unrestricted.download.includes('.m3u8') ? 'hls' : 'mp4',
+        isRealDebrid: true,
+        quality,
+        label: `RD Direct ${quality}`,
+        fileName: rdFileName,
+        rdFileId,
+        rdTorrentId: torrentId,
+      })
+    }
 
     return results
   } catch {
@@ -246,7 +313,7 @@ export const realDebridAdapter: ServerAdapter = {
       if (!magnets.length) return []
 
       const results = await Promise.all(
-        magnets.slice(0, 3).map(m => resolveMagnet(m, token, type, season, episode))
+        magnets.slice(0, 3).map(m => resolveMagnet(m.magnet, m.title, token, type, season, episode))
       )
       return results.flat()
     } catch (err) {

@@ -166,6 +166,8 @@ export const ar = {
     streamFailed: 'فشل تحميل الفيديو. جاري تجربة خادم آخر...',
     noStreams: 'لا تتوفر روابط مشاهدة لهذا المحتوى حالياً.',
     subtitleFailed: 'فشل تحميل الترجمة.',
+    refreshingStream: 'جاري تحديث رابط المشاهدة...',
+    streamExpired: 'انتهت صلاحية الرابط. جاري التحديث...',
   },
   maturity: {
     kids: 'أطفال',

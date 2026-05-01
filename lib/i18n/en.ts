@@ -166,6 +166,8 @@ export const en = {
     streamFailed: 'Failed to load video. Trying another server...',
     noStreams: 'No streams available for this content right now.',
     subtitleFailed: 'Failed to load subtitles.',
+    refreshingStream: 'Refreshing stream link...',
+    streamExpired: 'Stream link expired. Refreshing...',
   },
   maturity: {
     kids: 'Kids',

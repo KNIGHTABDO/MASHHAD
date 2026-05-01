@@ -16,7 +16,8 @@ export async function GET(request: Request) {
        firstEpisode: data.episodes ? data.episodes[0].name : null,
        error: data.status_message || null
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ error: msg })
   }
 }

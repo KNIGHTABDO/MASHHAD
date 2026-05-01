@@ -6,6 +6,8 @@ export interface StreamResult {
   isRealDebrid: boolean
   label?: string
   fileName?: string // The actual video filename for subtitle matching
+  rdFileId?: string   // Real-Debrid unrestricted file ID (for /streaming/transcode refresh)
+  rdTorrentId?: string // Real-Debrid torrent ID (for re-unrestrict)
 }
 
 export interface ServerAdapter {
