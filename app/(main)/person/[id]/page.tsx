@@ -1,5 +1,4 @@
 import Image from 'next/image'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { tmdb } from '@/lib/tmdb/client'
 import { getTMDBImageUrl } from '@/lib/utils/format'
@@ -44,11 +43,11 @@ export default async function PersonDetailPage({ params }: Props) {
 
   return (
     <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-[1400px] mx-auto">
+      <div className="max-w-350 mx-auto">
         <div className="flex flex-col md:flex-row gap-8 items-start mb-16">
           {/* Profile Photo */}
-          <div className="flex-shrink-0 w-48 md:w-72 mx-auto md:mx-0">
-            <div className="relative aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl bg-[#141414]">
+          <div className="shrink-0 w-48 md:w-72 mx-auto md:mx-0">
+            <div className="relative aspect-2/3 rounded-2xl overflow-hidden shadow-2xl bg-[#141414]">
               {person.profile_path ? (
                 <Image src={profileUrl} alt={person.name} fill className="object-cover" sizes="(max-width: 768px) 192px, 288px" />
               ) : (

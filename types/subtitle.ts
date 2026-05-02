@@ -11,6 +11,17 @@ export interface Subtitle {
   recommendedOffsetMs?: number
   syncScore?: number
   source?: string
+  alignment?: SubtitleAlignment
+}
+
+export type SubtitleAlignmentType = 'global_offset' | 'linear_drift' | 'line_snap' | 'manual_marker'
+
+export interface SubtitleAlignment {
+  id: string
+  type: SubtitleAlignmentType
+  offsetMs: number
+  driftRate?: number | null
+  confidence?: number | null
 }
 
 export interface SubtitleVote {

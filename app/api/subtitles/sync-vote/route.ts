@@ -27,8 +27,15 @@ export async function POST(request: Request) {
       profile_id: user.id,
       subtitle_file_id,
       offset_ms: clamped,
+      content_id: typeof body.content_id === 'string' ? body.content_id : null,
+      content_type: typeof body.content_type === 'string' ? body.content_type : null,
+      season_number: typeof body.season_number === 'number' ? body.season_number : null,
+      episode_number: typeof body.episode_number === 'number' ? body.episode_number : null,
+      stream_file_name: typeof body.stream_file_name === 'string' ? body.stream_file_name : null,
+      stream_hash: typeof body.stream_hash === 'string' ? body.stream_hash : null,
+      language: typeof body.language === 'string' ? body.language : null,
     },
-    { onConflict: 'profile_id,subtitle_file_id' }
+    { onConflict: 'profile_id,subtitle_file_id,content_id,content_type,season_number,episode_number,stream_hash,language' }
   )
 
   if (error) {
@@ -43,15 +50,21 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const subtitleFileId = searchParams.get('subtitle_file_id')
+  const contentId = searchParams.get('content_id')
+  const streamHash = searchParams.get('stream_hash')
   if (!subtitleFileId) {
     return NextResponse.json({ error: 'Missing subtitle_file_id' }, { status: 400 })
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('subtitle_sync_votes')
     .select('offset_ms')
     .eq('subtitle_file_id', subtitleFileId)
+  if (contentId) query = query.eq('content_id', contentId)
+  if (streamHash) query = query.eq('stream_hash', streamHash)
+
+  const { data, error } = await query
 
   if (error) {
     return NextResponse.json({ averageOffset: 0, voteCount: 0 })

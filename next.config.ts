@@ -1,64 +1,67 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from "next";
 
 const securityHeaders = [
   // Prevents clickjacking — SAMEORIGIN allows VidSrc iframe within our own page
-  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   // Prevents MIME-type sniffing attacks
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: "X-Content-Type-Options", value: "nosniff" },
   // Controls what the browser sends as Referer header
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Restricts access to browser features we don't use
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=()",
+  },
   // Enable DNS prefetch for performance
-  { key: 'X-DNS-Prefetch-Control', value: 'on' },
+  { key: "X-DNS-Prefetch-Control", value: "on" },
   // Content Security Policy — allow embeds from streaming providers
   {
-    key: 'Content-Security-Policy',
+    key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' https://image.tmdb.org https://*.gravatar.com data:",
       "font-src 'self' data:",
-      "connect-src 'self' https://api.themoviedb.org https://api.real-debrid.com https://*.supabase.co https://api.opensubtitles.com https://api.subdl.com https://*.strem.io",
+      "connect-src 'self' https://api.themoviedb.org https://api.real-debrid.com https://*.real-debrid.com https://*.stream.real-debrid.com https://*.real-debrid.cloud https://*.download.real-debrid.cloud https://*.supabase.co https://api.opensubtitles.com https://api.subdl.com https://*.strem.io",
       "frame-src 'self' https://vidsrc.me https://vidbom.com https://*.vidbom.com https://*.dood.la https://*.dood.stream https://streamwish.com https://*.streamwish.com https://filemoon.sx https://*.filemoon.sx https://*.fasselhd.com",
       "media-src 'self' blob: https:",
-    ].join('; '),
+    ].join("; "),
   },
-]
+];
 
 const nextConfig: NextConfig = {
   async headers() {
     return [
       {
         // Apply security headers to all routes
-        source: '/(.*)',
+        source: "/(.*)",
         headers: securityHeaders,
       },
-    ]
+    ];
   },
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'image.tmdb.org',
-        pathname: '/t/p/**',
+        protocol: "https",
+        hostname: "image.tmdb.org",
+        pathname: "/t/p/**",
       },
       {
-        protocol: 'https',
-        hostname: '**.gravatar.com',
+        protocol: "https",
+        hostname: "**.gravatar.com",
       },
       {
-        protocol: 'https',
-        hostname: 's4.anilist.co',
+        protocol: "https",
+        hostname: "s4.anilist.co",
       },
     ],
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000', 'mashhad-web.vercel.app'],
+      allowedOrigins: ["localhost:3000", "mashhad-web.vercel.app"],
     },
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;

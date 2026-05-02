@@ -20,29 +20,34 @@ export async function POST(request: Request) {
   const { torrentId, fileId, type } = body as {
     torrentId?: string
     fileId?: string
+    link?: string
     type?: 'direct' | 'transcode'
   }
+  const { link } = body as { link?: string }
 
   if (!torrentId || !fileId || !type) {
     return NextResponse.json({ error: 'Missing torrentId, fileId, or type' }, { status: 400 })
   }
 
-  const token = process.env.RD_API_TOKEN
+  const token = process.env.REALDEBRID_API_TOKEN || process.env.RD_API_TOKEN
   if (!token) {
     return NextResponse.json({ error: 'Server misconfigured: no RD token' }, { status: 500 })
   }
 
   try {
     if (type === 'direct') {
-      const infoRes = await fetch(`${RD_BASE}/torrents/info/${torrentId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(8000),
-      })
-      if (!infoRes.ok) {
-        return NextResponse.json({ error: 'Failed to fetch torrent info' }, { status: 502 })
+      let videoLink = link
+      if (!videoLink) {
+        const infoRes = await fetch(`${RD_BASE}/torrents/info/${torrentId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(8000),
+        })
+        if (!infoRes.ok) {
+          return NextResponse.json({ error: 'Failed to fetch torrent info' }, { status: 502 })
+        }
+        const info = await infoRes.json()
+        videoLink = info.links?.find((l: string) => /\.(mkv|mp4|avi|mov|m4v|webm)(\?|$)/i.test(l)) || info.links?.[0]
       }
-      const info = await infoRes.json()
-      const videoLink = info.links?.find((l: string) => /\.(mkv|mp4|avi|mov|m4v)(\?|$)/i.test(l)) || info.links?.[0]
       if (!videoLink) {
         return NextResponse.json({ error: 'No links found in torrent' }, { status: 404 })
       }

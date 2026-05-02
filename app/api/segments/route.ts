@@ -3,10 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
   // Auth check
+  let supabase: Awaited<ReturnType<typeof createClient>>
+  let profileId: string | null = null
   try {
-    const supabase = await createClient()
+    supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ intro: null, outro: null }, { status: 401 })
+    profileId = user.id
   } catch {
     return NextResponse.json({ intro: null, outro: null }, { status: 401 })
   }
@@ -42,13 +45,78 @@ export async function GET(request: Request) {
     )
 
     if (!introRes.ok) {
-      return NextResponse.json({ intro: null, outro: null })
+      throw new Error('IntroDB unavailable')
     }
 
     const introData = await introRes.json()
-    return NextResponse.json(introData)
+    if (introData?.intro || introData?.outro || introData?.recap) {
+      return NextResponse.json({ ...introData, source: 'introdb' })
+    }
   } catch (error) {
     console.error('IntroDB Error:', error)
-    return NextResponse.json({ intro: null, outro: null })
   }
+
+  try {
+    const { data } = await supabase
+      .from('community_segments')
+      .select('segment_type, start_sec, end_sec, vote_count, verified')
+      .eq('content_id', tmdb_id)
+      .eq('content_type', 'episode')
+      .eq('season_number', Number(season))
+      .eq('episode_number', Number(episode))
+      .eq('verified', true)
+
+    const response = { intro: null, outro: null, recap: null, source: 'community', needsCommunityVote: true } as Record<string, unknown>
+    for (const segment of data || []) {
+      response[segment.segment_type] = {
+        start_sec: segment.start_sec,
+        end_sec: segment.end_sec,
+        vote_count: segment.vote_count,
+      }
+    }
+    return NextResponse.json(response)
+  } catch {
+    return NextResponse.json({ intro: null, outro: null, needsCommunityVote: true, profileId })
+  }
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const segmentType = body.segment_type
+  const startSec = body.start_sec
+  const endSec = body.end_sec
+  if (!['intro', 'outro', 'recap'].includes(String(segmentType)) || typeof startSec !== 'number' || typeof endSec !== 'number' || endSec <= startSec) {
+    return NextResponse.json({ error: 'Invalid segment' }, { status: 400 })
+  }
+
+  const row = {
+    content_id: body.content_id,
+    content_type: body.content_type || 'episode',
+    season_number: body.season_number,
+    episode_number: body.episode_number,
+    segment_type: segmentType,
+    start_sec: Math.max(0, Math.round(startSec)),
+    end_sec: Math.max(0, Math.round(endSec)),
+    profile_id: user.id,
+    vote_count: 1,
+    verified: false,
+  }
+
+  const { error } = await supabase.from('community_segments').insert(row)
+  if (error) {
+    console.error('[Community Segments]', error)
+    return NextResponse.json({ error: 'Database error' }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
 }

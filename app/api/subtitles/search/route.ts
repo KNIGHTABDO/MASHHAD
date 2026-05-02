@@ -13,6 +13,9 @@ const ALLOWED_SUBTITLE_HOSTS = [
   'subscene.com',
 ]
 
+const vttCache = new Map<string, { content: string; expiresAt: number }>()
+const VTT_CACHE_MS = 6 * 60 * 60 * 1000
+
 // ─── Scoring weights ───
 // The ONLY way to get perfect lip sync is to find the subtitle that was
 // made for the EXACT SAME video release you are watching.
@@ -122,6 +125,23 @@ interface RawSubtitle {
   releaseName?: string
 }
 
+interface AlignmentRow {
+  id: string
+  subtitle_file_id: string
+  correction_type: string
+  offset_ms: number
+  drift_rate: number | null
+  confidence: number | null
+  content_id: string | null
+  content_type: string | null
+  season_number: number | null
+  episode_number: number | null
+  stream_hash: string | null
+  stream_file_name: string | null
+  language: string | null
+  updated_at: string | null
+}
+
 function scoreSub(sub: RawSubtitle, streamFileName: string): number {
   let score = 0
   const subName = sub.fileName || sub.releaseName || ''
@@ -202,6 +222,7 @@ export async function GET(request: Request) {
   const episode = searchParams.get('episode')
   const language = searchParams.get('language') || 'ar'
   const streamFile = searchParams.get('streamFile') || ''
+  const streamHash = searchParams.get('streamHash') || ''
 
   if (!tmdbId) return NextResponse.json({ error: 'Missing tmdbId' }, { status: 400 })
 
@@ -252,18 +273,65 @@ export async function GET(request: Request) {
       console.log(`[Subtitles] #${i + 1}: score=${s.syncScore} src=${s.source} file="${s.fileName?.substring(0, 60)}"`)
     })
 
-    // Batch-fetch community sync offsets for all subtitle file IDs
-    const fileIds = scored.slice(0, 25).map(s => s.id)
+    // Batch-fetch alignment profiles first, then community sync offsets
+    const fileIds = Array.from(new Set(scored.slice(0, 25).flatMap(s => [s.id, s.fileId]).filter(Boolean)))
+    const alignmentMap: Record<string, AlignmentRow> = {}
     const offsetMap: Record<string, number> = {}
     if (fileIds.length > 0) {
       try {
+        const { data: alignments } = await supabase
+          .from('subtitle_alignment_profiles')
+          .select('id, subtitle_file_id, correction_type, offset_ms, drift_rate, confidence, content_id, content_type, season_number, episode_number, stream_hash, stream_file_name, language, updated_at')
+          .in('subtitle_file_id', fileIds)
+
+        if (alignments) {
+          for (const raw of alignments as AlignmentRow[]) {
+            if (raw.content_id && raw.content_id !== tmdbId) continue
+            if (raw.content_type && raw.content_type !== type) continue
+            if (raw.season_number != null && String(raw.season_number) !== String(season)) continue
+            if (raw.episode_number != null && String(raw.episode_number) !== String(episode)) continue
+            if (raw.language && raw.language !== language) continue
+            if (raw.stream_hash && streamHash && raw.stream_hash !== streamHash) continue
+            if (!raw.stream_hash && raw.stream_file_name && streamFile && raw.stream_file_name !== streamFile) continue
+
+            const key = raw.subtitle_file_id
+            const existing = alignmentMap[key]
+            if (!existing) {
+              alignmentMap[key] = raw
+              continue
+            }
+
+            const nextScore = raw.confidence ?? 0
+            const currentScore = existing.confidence ?? 0
+            if (nextScore > currentScore) {
+              alignmentMap[key] = raw
+              continue
+            }
+
+            if (nextScore === currentScore && raw.updated_at && (!existing.updated_at || raw.updated_at > existing.updated_at)) {
+              alignmentMap[key] = raw
+            }
+          }
+        }
+      } catch {
+        // Alignment profiles are optional
+      }
+
+      try {
         const { data: votes } = await supabase
           .from('subtitle_sync_votes')
-          .select('subtitle_file_id, offset_ms')
+          .select('subtitle_file_id, offset_ms, content_id, content_type, season_number, episode_number, stream_file_name, stream_hash, language')
           .in('subtitle_file_id', fileIds)
         if (votes) {
           const groups: Record<string, number[]> = {}
           for (const v of votes) {
+            if (v.content_id && v.content_id !== tmdbId) continue
+            if (v.content_type && v.content_type !== type) continue
+            if (v.season_number != null && String(v.season_number) !== String(season)) continue
+            if (v.episode_number != null && String(v.episode_number) !== String(episode)) continue
+            if (v.language && v.language !== language) continue
+            if (v.stream_hash && streamHash && v.stream_hash !== streamHash) continue
+            if (!v.stream_hash && v.stream_file_name && streamFile && v.stream_file_name !== streamFile) continue
             const key = v.subtitle_file_id
             if (!groups[key]) groups[key] = []
             groups[key].push(v.offset_ms)
@@ -277,18 +345,35 @@ export async function GET(request: Request) {
       }
     }
 
-    const subtitles = scored.slice(0, 25).map(s => ({
-      id: s.id,
-      fileId: s.fileId,
-      fileName: s.fileName,
-      language: s.language,
-      downloadCount: s.downloadCount,
-      rating: s.rating,
-      uploaderName: s.uploaderName,
-      syncScore: s.syncScore,
-      source: s.source,
-      recommendedOffsetMs: offsetMap[s.id] || 0,
-    }))
+    const subtitles = scored.slice(0, 25).map(s => {
+      const alignment = alignmentMap[s.fileId] || alignmentMap[s.id]
+      const alignmentOffsetEligible = alignment && alignment.correction_type !== 'linear_drift'
+      const recommendedOffsetMs = alignmentOffsetEligible
+        ? alignment.offset_ms
+        : (offsetMap[s.fileId] || offsetMap[s.id] || 0)
+
+      return {
+        id: s.id,
+        fileId: s.fileId,
+        fileName: s.fileName,
+        language: s.language,
+        downloadCount: s.downloadCount,
+        rating: s.rating,
+        uploaderName: s.uploaderName,
+        syncScore: s.syncScore,
+        source: s.source,
+        recommendedOffsetMs,
+        alignment: alignment
+          ? {
+            id: alignment.id,
+            type: alignment.correction_type,
+            offsetMs: alignment.offset_ms,
+            driftRate: alignment.drift_rate,
+            confidence: alignment.confidence,
+          }
+          : undefined,
+      }
+    })
 
     // English fallback if no Arabic found
     if (subtitles.length === 0 && language === 'ar') {
@@ -504,6 +589,12 @@ export async function POST(request: Request) {
   if (!fileId) return NextResponse.json({ error: 'Missing fileId' }, { status: 400 })
 
   try {
+    const cacheKey = fileId.toString()
+    const cached = vttCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json({ vttContent: cached.content, cached: true })
+    }
+
     let downloadLink = ''
 
     if (fileId.toString().startsWith('http')) {
@@ -539,7 +630,10 @@ export async function POST(request: Request) {
 
     // SubDL returns ZIP files — use fflate to decompress
     if (downloadLink.includes('subdl.com') && downloadLink.includes('.zip')) {
-      return await handleSubDLDownload(downloadLink)
+      const response = await handleSubDLDownload(downloadLink)
+      const data = await response.clone().json().catch(() => null)
+      if (data?.vttContent) vttCache.set(cacheKey, { content: data.vttContent, expiresAt: Date.now() + VTT_CACHE_MS })
+      return response
     }
 
     // Fetch the SRT content
@@ -547,6 +641,7 @@ export async function POST(request: Request) {
     const buffer = await srtRes.arrayBuffer()
     const srtContent = decodeSubtitleBuffer(buffer)
     const vttContent = srtToVtt(srtContent)
+    vttCache.set(cacheKey, { content: vttContent, expiresAt: Date.now() + VTT_CACHE_MS })
     return NextResponse.json({ vttContent })
   } catch (err) {
     console.error('[Sub Download]', err)

@@ -50,7 +50,7 @@ export function DownloadButton({ tmdbId, type, season, episode, variant = 'stand
       const data = await res.json()
       
       const downloadableStreams = (data.streams || [])
-        .filter((s: StreamResult) => s.isRealDebrid && s.type === 'mp4')
+        .filter((s: StreamResult) => s.isRealDebrid && s.variant === 'direct' && s.type === 'mp4')
       
       if (downloadableStreams.length === 0) {
         alert(t.content.noDownloadAvailable || 'No downloads available')

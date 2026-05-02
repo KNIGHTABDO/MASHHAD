@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import { tmdb } from '@/lib/tmdb/client'
 
 export async function GET(request: Request) {
@@ -13,7 +12,6 @@ export async function GET(request: Request) {
 
   // Resolve language: query param > cookie > default ar
   if (langParam && (langParam === 'ar' || langParam === 'en')) {
-    const cookieStore = await cookies()
     // Temporarily override cookie value for this request by setting it
     // Actually, we just need to pass lang to tmdb client — but the client reads from cookies.
     // So we set a cookie in the cookie store context — instead, we'll call TMDB directly here.

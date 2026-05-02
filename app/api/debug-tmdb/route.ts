@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
+export async function GET() {
   const TMDB_KEY = process.env.TMDB_API_KEY
   const tmdbPath = 'tv/95479/season/1'
   const queryParams = new URLSearchParams()

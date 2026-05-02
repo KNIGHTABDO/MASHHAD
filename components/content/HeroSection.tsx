@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -72,7 +72,7 @@ export function HeroSection({ items, mediaType: defaultMediaType }: HeroSectionP
 
   return (
     <div
-      className="relative h-[85vh] min-h-[500px] overflow-hidden"
+      className="relative h-[85vh] min-h-125 overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -93,14 +93,14 @@ export function HeroSection({ items, mediaType: defaultMediaType }: HeroSectionP
             sizes="100vw"
           />
           {/* Gradient overlays */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-[#0A0A0A] via-[#0A0A0A]/40 to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-r from-[#0A0A0A]/80 via-transparent to-transparent" />
         </motion.div>
       </AnimatePresence>
 
       {/* Content */}
       <div className="absolute inset-0 flex items-end pb-44">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="max-w-350 mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentIndex}
@@ -119,7 +119,7 @@ export function HeroSection({ items, mediaType: defaultMediaType }: HeroSectionP
                   <>
                     <span className="text-[#666] text-sm">•</span>
                     {/* Use i18n instead of hardcoded language ternary */}
-                    <span className="text-xs bg-[#1F1F1F] border border-[var(--border-visible)] px-2 py-0.5 rounded-md text-[#B3B3B3]">{t.content.series}</span>
+                    <span className="text-xs bg-[#1F1F1F] border border-(--border-visible) px-2 py-0.5 rounded-md text-[#B3B3B3]">{t.content.series}</span>
                   </>
                 )}
               </div>
