@@ -5,12 +5,14 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useClerk } from '@clerk/nextjs'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { useProfileStore } from '@/store/profileStore'
 import { useT } from '@/lib/i18n/context'
 
 export function Navbar() {
   const { t, lang, setLang } = useT()
+  const { user } = useUser()
+  const isPro = user?.publicMetadata?.plan === 'lifetime' || user?.publicMetadata?.isPro === true
   const [scrolled, setScrolled] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -171,6 +173,20 @@ export function Navbar() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* Upgrade Button */}
+            {!isPro && (
+              <Link
+                href="/upgrade"
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-linear-to-r from-amber-500/10 to-[#E50914]/10 border border-amber-500/20 hover:border-amber-500/40 transition-all group relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-linear-to-r from-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="text-[10px] font-black text-amber-500 tracking-wider">
+                  {lang === 'ar' ? 'مشهد برو' : 'MASHHAD PRO'}
+                </span>
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+              </Link>
+            )}
 
             {/* Language Selector */}
             <button
