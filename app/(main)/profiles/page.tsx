@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useUser, useAuth } from '@clerk/nextjs'
 import { createClient } from '@/lib/supabase/client'
 import { useProfileStore } from '@/store/profileStore'
 import { useT } from '@/lib/i18n/context'
@@ -17,19 +18,25 @@ export default function ProfilesPage() {
   const { setActiveProfile } = useProfileStore()
   const router = useRouter()
   const { t } = useT()
+  const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()
 
-  useEffect(() => {
-    loadProfiles()
-  }, [])
-
-  async function loadProfiles() {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  const loadProfiles = useCallback(async () => {
+    if (!isLoaded) return
+    const token = await getToken({ template: 'supabase' })
+    const supabase = createClient(token || undefined)
+    if (!user) {
+      setLoading(false)
+      return
+    }
     const { data } = await supabase.from('profiles').select('*').eq('user_id', user.id).order('created_at')
     setProfiles(data || [])
     setLoading(false)
-  }
+  }, [isLoaded, user])
+
+  useEffect(() => {
+    loadProfiles()
+  }, [loadProfiles])
 
   function selectProfile(profile: Profile) {
     if (manageMode) return

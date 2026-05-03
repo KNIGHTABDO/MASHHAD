@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveStreamGraph } from '@/lib/servers'
 
@@ -14,13 +15,8 @@ export async function GET(request: Request) {
   }
 
   // Validate user session
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  } catch {
+  const { userId } = await auth()
+  if (!userId) {
     return NextResponse.json({ error: 'Auth error' }, { status: 401 })
   }
 

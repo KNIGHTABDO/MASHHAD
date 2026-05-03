@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
 export async function GET() {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ items: [] }, { status: 401 })
+
   const cookieStore = await cookies()
   const profileId = cookieStore.get('active_profile_id')?.value
   if (!profileId) return NextResponse.json({ items: [] })
@@ -32,6 +36,9 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { searchParams } = new URL(request.url)
   const contentId = searchParams.get('contentId')
   const cookieStore = await cookies()

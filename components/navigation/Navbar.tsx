@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { createClient } from '@/lib/supabase/client'
+import { useClerk } from '@clerk/nextjs'
 import { useProfileStore } from '@/store/profileStore'
 import { useT } from '@/lib/i18n/context'
 
@@ -19,6 +19,7 @@ export function Navbar() {
   const pathname = usePathname()
   const { activeProfile, clearProfile } = useProfileStore()
   const searchRef = useRef<HTMLInputElement>(null)
+  const { signOut } = useClerk()
 
   const navLinks = [
     { href: '/', label: t.nav.home },
@@ -58,11 +59,9 @@ export function Navbar() {
   }, [searchOpen])
 
   async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await signOut()
     clearProfile()
     router.push('/login')
-    router.refresh()
   }
 
   function handleSearch(e: React.FormEvent) {
@@ -84,14 +83,14 @@ export function Navbar() {
       className={`fixed top-0 inset-x-0 z-50 transition-all duration-700 ease-in-out ${
         scrolled 
           ? 'bg-black/80 backdrop-blur-xl border-b border-white/10 py-0' 
-          : 'bg-gradient-to-b from-black/90 via-black/40 to-transparent py-2'
+          : 'bg-linear-to-b from-black/90 via-black/40 to-transparent py-2'
       }`}
     >
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto px-4 sm:px-6 lg:px-8" style={{ maxWidth: '1400px' }}>
         <div className="flex items-center justify-between h-16 gap-4">
 
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center flex-shrink-0 transition-transform active:scale-95">
+            <Link href="/" className="flex items-center shrink-0 transition-transform active:scale-95">
               <Image src="/logo.png" alt="مشهد" width={200} height={200} className="h-14 w-auto" priority />
             </Link>
 

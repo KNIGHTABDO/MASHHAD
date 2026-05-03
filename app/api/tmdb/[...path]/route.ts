@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@clerk/nextjs/server'
 
 // Allowlist of valid TMDB path prefixes — prevents proxying arbitrary TMDB endpoints
 const ALLOWED_TMDB_PREFIXES = [
@@ -24,13 +24,8 @@ export async function GET(
   const isPublicPath = tmdbPath.startsWith('trending/')
   
   if (!isPublicPath) {
-    try {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-    } catch {
+    const { userId } = await auth()
+    if (!userId) {
       return NextResponse.json({ error: 'Auth error' }, { status: 401 })
     }
   }

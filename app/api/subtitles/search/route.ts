@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { unzipSync } from 'fflate'
-import { createClient } from '@/lib/supabase/server'
 
 // Allowlist of legitimate subtitle CDN hostnames (SSRF protection)
 const ALLOWED_SUBTITLE_HOSTS = [
@@ -207,11 +207,8 @@ function scoreSub(sub: RawSubtitle, streamFileName: string): number {
 // ─── GET: Search subtitles ───
 export async function GET(request: Request) {
   // Auth check — prevents burning OpenSubtitles + SubDL quota for unauthenticated users
-  const supabase = await createClient()
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ subtitles: [] }, { status: 401 })
-  } catch {
+  const { userId } = await auth()
+  if (!userId) {
     return NextResponse.json({ subtitles: [] }, { status: 401 })
   }
 
@@ -576,11 +573,8 @@ async function fetchSubDL(
 // ─── POST: Download and convert subtitle to VTT ───
 export async function POST(request: Request) {
   // Auth check
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  } catch {
+  const { userId } = await auth()
+  if (!userId) {
     return NextResponse.json({ error: 'Auth error' }, { status: 401 })
   }
 

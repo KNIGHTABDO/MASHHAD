@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.3.0",
+    "@hevcjs/dashjs-plugin": "^1.0.2",
+    "@mediabunny/ac3": "^1.43.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@supabase/ssr": "^0.10.2",
@@ -17,8 +20,6 @@
     "@tanstack/react-virtual": "^3.13.24",
     "@types/three": "^0.184.0",
     "@vidstack/react": "^1.12.13",
-    "@hevcjs/dashjs-plugin": "^1.0.2",
-    "@mediabunny/ac3": "^1.43.0",
     "clsx": "^2.1.1",
     "dashjs": "^5.1.1",
     "fflate": "^0.8.2",
@@ -29,6 +30,7 @@
     "next": "15.5.15",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "svix": "^1.92.2",
     "tailwind-merge": "^3.5.0",
     "three": "^0.184.0",
     "zustand": "^5.0.12"

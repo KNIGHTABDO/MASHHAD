@@ -1,5 +1,4 @@
 import { buildAnimeSeasonData } from './lib/anime/season';
-import { getAnimeById } from './lib/anime/anilist';
 
 async function test() {
   try {

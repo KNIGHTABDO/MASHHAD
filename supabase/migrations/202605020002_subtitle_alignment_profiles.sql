@@ -2,7 +2,7 @@
 
 create table if not exists public.subtitle_alignment_profiles (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
+  user_id text,
   profile_id uuid,
   subtitle_file_id text not null,
   content_id text not null,

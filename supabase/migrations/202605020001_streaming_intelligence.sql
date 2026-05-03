@@ -60,7 +60,7 @@ create policy "stream_candidate_cache_update_auth"
 
 create table if not exists public.stream_playback_events (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
+  user_id text,
   profile_id uuid,
   event_type text not null check (event_type in (
     'resolve_started',

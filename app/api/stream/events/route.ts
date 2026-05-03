@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 
 const VALID_EVENTS = new Set([
@@ -14,8 +15,8 @@ const VALID_EVENTS = new Set([
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: Record<string, unknown>
   try {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   const row = {
-    user_id: user.id,
+    user_id: userId,
     profile_id: typeof body.profile_id === 'string' ? body.profile_id : null,
     event_type: eventType,
     content_id: typeof body.content_id === 'string' ? body.content_id : null,

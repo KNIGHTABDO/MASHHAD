@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { useUser, useAuth } from '@clerk/nextjs'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/lib/i18n/context'
 import type { ProfileFormData } from '@/types/profile'
@@ -35,6 +36,8 @@ function ManageProfileContent() {
   const [error, setError] = useState<string | null>(null)
   const [isEdit, setIsEdit] = useState(false)
   const { t, lang } = useT()
+  const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()
 
   useEffect(() => {
     if (editId) {
@@ -44,7 +47,8 @@ function ManageProfileContent() {
   }, [editId])
 
   async function loadProfile(id: string) {
-    const supabase = createClient()
+    const token = await getToken({ template: 'supabase' })
+    const supabase = createClient(token || undefined)
     const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
     if (data) {
       setForm({
@@ -64,9 +68,9 @@ function ManageProfileContent() {
     e.preventDefault()
     setError(null)
     setSaving(true)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError(t.errors.unauthorized); setSaving(false); return }
+    if (!isLoaded || !user) { setError(t.errors.unauthorized); setSaving(false); return }
+    const token = await getToken({ template: 'supabase' })
+    const supabase = createClient(token || undefined)
 
     if (isEdit && editId) {
       const { error } = await supabase.from('profiles').update({ ...form, updated_at: new Date().toISOString() }).eq('id', editId)
@@ -82,7 +86,8 @@ function ManageProfileContent() {
 
   async function handleDelete() {
     if (!editId || !confirm(t.profiles.deleteConfirm)) return
-    const supabase = createClient()
+    const token = await getToken({ template: 'supabase' })
+    const supabase = createClient(token || undefined)
     await supabase.from('profiles').delete().eq('id', editId)
     router.push('/profiles')
   }
@@ -114,7 +119,8 @@ function ManageProfileContent() {
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               required
               maxLength={20}
-              className="w-full bg-[#1F1F1F] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-white outline-none focus:border-[#0071E3] transition-colors"
+              className="w-full bg-[#1F1F1F] border rounded-xl px-4 py-3 text-white outline-none focus:border-[#0071E3] transition-colors"
+              style={{ borderColor: 'var(--border-subtle)' }}
               placeholder={lang === 'ar' ? 'مثال: علي' : 'e.g. Ali'}
             />
           </div>
@@ -143,9 +149,12 @@ function ManageProfileContent() {
             <button
               type="button"
               onClick={() => setForm(f => ({ ...f, is_kids: !f.is_kids, maturity_level: !f.is_kids ? 'kids' : 'all' }))}
-              className={`w-12 h-6 rounded-full transition-all duration-300 ${form.is_kids ? 'bg-[#E50914]' : 'bg-[#333]'}`}
+                className={`w-12 h-6 rounded-full transition-all duration-300 ${form.is_kids ? 'bg-[#E50914]' : 'bg-[#333]'}`}
             >
-              <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${form.is_kids ? 'translate-x-[-2px]' : 'translate-x-[26px]'}`} />
+              <div
+                className="w-5 h-5 bg-white rounded-full shadow transition-transform duration-300"
+                style={{ transform: form.is_kids ? 'translateX(-2px)' : 'translateX(26px)' }}
+              />
             </button>
           </div>
 
@@ -182,7 +191,10 @@ function ManageProfileContent() {
                 onClick={() => setForm(f => ({ ...f, [key]: !f[key as keyof ProfileFormData] }))}
                 className={`w-12 h-6 rounded-full transition-all duration-300 ${form[key as keyof ProfileFormData] ? 'bg-[#0071E3]' : 'bg-[#333]'}`}
               >
-                <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${form[key as keyof ProfileFormData] ? 'translate-x-[-2px]' : 'translate-x-[26px]'}`} />
+                <div
+                  className="w-5 h-5 bg-white rounded-full shadow transition-transform duration-300"
+                  style={{ transform: form[key as keyof ProfileFormData] ? 'translateX(-2px)' : 'translateX(26px)' }}
+                />
               </button>
             </div>
           ))}
@@ -202,7 +214,8 @@ function ManageProfileContent() {
             <button
               type="button"
               onClick={() => router.push('/profiles')}
-              className="flex-1 bg-[#1F1F1F] border border-[var(--border-visible)] text-[#B3B3B3] font-medium py-3.5 rounded-xl hover:text-white transition-all"
+              className="flex-1 bg-[#1F1F1F] border text-[#B3B3B3] font-medium py-3.5 rounded-xl hover:text-white transition-all"
+              style={{ borderColor: 'var(--border-visible)' }}
             >
               {t.profiles.cancel}
             </button>

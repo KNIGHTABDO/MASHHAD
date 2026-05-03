@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
   // Auth check
   let supabase: Awaited<ReturnType<typeof createClient>>
   let profileId: string | null = null
+  const { userId } = await auth()
   try {
+    if (!userId) return NextResponse.json({ intro: null, outro: null }, { status: 401 })
     supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ intro: null, outro: null }, { status: 401 })
-    profileId = user.id
+    profileId = userId
   } catch {
     return NextResponse.json({ intro: null, outro: null }, { status: 401 })
   }
@@ -82,8 +83,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { userId } = await auth()
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: Record<string, unknown>
   try {

@@ -1,7 +1,26 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from 'next'
 import localFont from 'next/font/local'
 import './globals.css'
 import { Providers } from '@/components/Providers'
+
+const clerkAppearance = {
+  theme: 'simple',
+  cssLayerName: 'clerk',
+  variables: {
+    colorPrimary: '#E50914',
+    colorForeground: '#FFFFFF',
+    colorMutedForeground: '#B3B3B3',
+    colorBackground: '#141414',
+    colorInput: '#1F1F1F',
+    colorInputForeground: '#FFFFFF',
+    colorBorder: 'rgba(255, 255, 255, 0.08)',
+    colorPrimaryForeground: '#FFFFFF',
+  },
+  options: {
+    logoPlacement: 'outside',
+  },
+}
 
 const thmanyah = localFont({
   src: [
@@ -55,8 +74,10 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://api.subdl.com" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="bg-[#0A0A0A] text-white antialiased font-[family-name:var(--font-thmanyah)]">
-        <Providers>{children}</Providers>
+      <body className="bg-[#0A0A0A] text-white antialiased font-(family-name:--font-thmanyah)">
+        <ClerkProvider appearance={clerkAppearance}>
+          <Providers>{children}</Providers>
+        </ClerkProvider>
       </body>
     </html>
   )

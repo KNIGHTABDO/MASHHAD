@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { useT } from '@/lib/i18n/context'
 import { motion } from 'framer-motion'
 import { slideUp } from '@/lib/animations'
@@ -9,20 +9,17 @@ import { slideUp } from '@/lib/animations'
 export default function SettingsPage() {
   const [email, setEmail] = useState('')
   const { t, lang } = useT()
+  const { user, isLoaded } = useUser()
+  const { openUserProfile } = useClerk()
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email || '')
-    })
-  }, [])
+    if (!isLoaded) return
+    setEmail(user?.emailAddresses[0]?.emailAddress || '')
+  }, [isLoaded, user])
 
   async function handleChangePassword() {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user?.email) return
-    await supabase.auth.resetPasswordForEmail(user.email)
-    alert('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.')
+    if (!user) return
+    openUserProfile()
   }
 
   return (
@@ -39,14 +36,15 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-[#B3B3B3] mb-2">{t.auth.email}</label>
-                <div className="bg-[#1F1F1F] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[#666]" dir="ltr">
+                <div className="bg-[#1F1F1F] border rounded-xl px-4 py-3 text-[#666]" style={{ borderColor: 'var(--border-subtle)' }} dir="ltr">
                   {email || t.content.loading}
                 </div>
               </div>
 
               <button
                 onClick={handleChangePassword}
-                className="w-full border border-[var(--border-visible)] text-[#B3B3B3] hover:text-white hover:border-white py-3 rounded-xl transition-all text-sm"
+                className="w-full border text-[#B3B3B3] hover:text-white hover:border-white py-3 rounded-xl transition-all text-sm"
+                style={{ borderColor: 'var(--border-visible)' }}
               >
                 {t.settings.changePassword}
               </button>
