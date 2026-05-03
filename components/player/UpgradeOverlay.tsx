@@ -2,14 +2,13 @@
 
 import { motion } from 'framer-motion'
 import { useT } from '@/lib/i18n/context'
-import { SignInButton } from '@clerk/nextjs'
 
 interface UpgradeOverlayProps {
   isLimitReached: boolean
 }
 
 export function UpgradeOverlay({ isLimitReached }: UpgradeOverlayProps) {
-  const { t, lang } = useT()
+  const { lang } = useT()
 
   if (!isLimitReached) return null
 

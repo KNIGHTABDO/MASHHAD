@@ -744,7 +744,6 @@ export function WatchClient({
   }, [syncProgress]);
 
   // ── Usage Tracking Heartbeat ─────────────────────────────────────
-  const lastHeartbeatRef = useRef<number>(Date.now());
   
   useEffect(() => {
     async function checkUsage() {

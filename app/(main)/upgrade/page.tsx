@@ -9,7 +9,7 @@ import { useUser } from '@clerk/nextjs'
 const STRIPE_LINK = "https://buy.stripe.com/test_4gMeVd1S00x8cOKc9OeAg00"
 
 export default function UpgradePage() {
-  const { t, lang } = useT()
+  const { lang } = useT()
   const { user } = useUser()
 
   const handleUpgrade = () => {

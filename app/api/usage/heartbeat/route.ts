@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface ClerkMetadata {
+  plan?: string;
+  isPro?: boolean;
+}
+
 export async function POST(request: Request) {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Safely check for Pro status in Clerk metadata
-  const metadata = sessionClaims?.metadata as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metadata = (sessionClaims?.metadata || {}) as any
   const isPro = metadata?.plan === 'lifetime' || metadata?.isPro === true
 
   const { increment = 30 } = await request.json()
@@ -35,12 +41,13 @@ export async function GET() {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const metadata = sessionClaims?.metadata as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metadata = (sessionClaims?.metadata || {}) as any
   const isPro = metadata?.plan === 'lifetime' || metadata?.isPro === true
   
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('user_usage')
     .select('seconds_watched')
     .eq('user_id', userId)

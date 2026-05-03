@@ -4,7 +4,8 @@ import Stripe from 'stripe'
 import { clerkClient } from '@clerk/nextjs/server'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-10-28' as any, // Use latest or your specific version
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  apiVersion: '2025-02-24.acacia' as any,
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -17,8 +18,9 @@ export async function POST(req: Request) {
 
   try {
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
-  } catch (err: any) {
-    console.error(`[Stripe Webhook] Error: ${err.message}`)
+  } catch (err: unknown) {
+    const error = err as Error
+    console.error(`[Stripe Webhook] Error: ${error.message}`)
     return NextResponse.json({ error: 'Webhook Error' }, { status: 400 })
   }
 
@@ -40,8 +42,8 @@ export async function POST(req: Request) {
           }
         })
         console.log(`[Stripe Webhook] Successfully activated Pro for ${userId}`)
-      } catch (err) {
-        console.error(`[Stripe Webhook] Failed to update Clerk metadata:`, err)
+      } catch (clerkErr: unknown) {
+        console.error(`[Stripe Webhook] Failed to update Clerk metadata:`, clerkErr)
         return NextResponse.json({ error: 'Clerk Error' }, { status: 500 })
       }
     }
