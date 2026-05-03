@@ -15,6 +15,7 @@ import { parseSubtitleCues, type SubtitleCue } from "@/lib/subtitles/parse";
 import type { StreamResult } from "@/types/stream";
 import type { Subtitle } from "@/types/subtitle";
 import { PostPlaybackScreen } from "./PostPlaybackScreen";
+import { UpgradeOverlay } from "./UpgradeOverlay";
 
 interface WatchClientProps {
   contentId: string;
@@ -365,6 +366,13 @@ export function WatchClient({
   const [lastFallbackError, setLastFallbackError] = useState<string | null>(
     null,
   );
+
+  const [usageState, setUsageState] = useState({
+    secondsWatchedToday: 0,
+    isPro: false,
+    limitReached: false,
+    loading: true
+  });
 
   // Touch gesture state
   const [touchStartX, setTouchStartX] = useState(0);
@@ -734,6 +742,64 @@ export function WatchClient({
       if (syncTimer.current) clearInterval(syncTimer.current);
     };
   }, [syncProgress]);
+
+  // ── Usage Tracking Heartbeat ─────────────────────────────────────
+  const lastHeartbeatRef = useRef<number>(Date.now());
+  
+  useEffect(() => {
+    async function checkUsage() {
+      try {
+        const res = await fetch('/api/usage/heartbeat');
+        const data = await res.json();
+        setUsageState(prev => ({
+          ...prev,
+          secondsWatchedToday: data.secondsWatchedToday,
+          isPro: data.isPro,
+          limitReached: data.limitReached,
+          loading: false
+        }));
+      } catch (err) {
+        console.error('[Usage Check] Error:', err);
+      }
+    }
+    checkUsage();
+  }, []);
+
+  useEffect(() => {
+    const heartbeatInterval = setInterval(async () => {
+      const isEmbed = streams[currentStreamIndex]?.type === "embed";
+      const video = videoRef.current;
+      const isActuallyPlaying = isEmbed || (video && !video.paused && !isBuffering);
+      
+      if (isActuallyPlaying && !usageState.limitReached) {
+        try {
+          const res = await fetch('/api/usage/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ increment: 30 })
+          });
+          const data = await res.json();
+          setUsageState(prev => ({
+            ...prev,
+            secondsWatchedToday: data.secondsWatchedToday,
+            isPro: data.isPro,
+            limitReached: data.limitReached
+          }));
+        } catch (err) {
+          console.error('[Usage Heartbeat] Error:', err);
+        }
+      }
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(heartbeatInterval);
+  }, [streams, currentStreamIndex, usageState.limitReached, isBuffering]);
+
+  // Block playback if limit reached
+  useEffect(() => {
+    if (usageState.limitReached) {
+      safePause();
+    }
+  }, [usageState.limitReached, safePause]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -3019,6 +3085,8 @@ export function WatchClient({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6" /></svg>
         </button>
       )}
+      {/* Upgrade Overlay */}
+      <UpgradeOverlay isLimitReached={usageState.limitReached} />
     </div>
   );
 }
