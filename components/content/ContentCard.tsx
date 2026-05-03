@@ -60,8 +60,13 @@ export function ContentCard({ item, mediaType: propMediaType, variant, index = 0
           const res = await fetch(`/api/tmdb/${mediaType}/${item.id}/videos?lang=${lang}`)
           const data = await res.json()
           // Only take YouTube videos
-          const trailer = data.results?.find((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')) || 
-                          data.results?.find((v: any) => v.site === 'YouTube')
+          interface TMDBVideo {
+            site: string
+            type: string
+            key: string
+          }
+          const trailer = data.results?.find((v: TMDBVideo) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')) || 
+                          data.results?.find((v: TMDBVideo) => v.site === 'YouTube')
           if (trailer?.key) setTrailerKey(trailer.key)
         } catch { /* ignore */ }
       }

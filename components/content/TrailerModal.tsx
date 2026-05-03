@@ -26,8 +26,13 @@ export function TrailerModal({ tmdbId, type, isOpen, onClose }: TrailerModalProp
         try {
           const res = await fetch(`/api/tmdb/${type}/${tmdbId}/videos?lang=${lang}`)
           const data = await res.json()
-          const trailer = data.results?.find((v: any) => v.site === 'YouTube' && v.type === 'Trailer') || 
-                          data.results?.find((v: any) => v.site === 'YouTube')
+          interface TMDBVideo {
+            site: string
+            type: string
+            key: string
+          }
+          const trailer = data.results?.find((v: TMDBVideo) => v.site === 'YouTube' && v.type === 'Trailer') || 
+                          data.results?.find((v: TMDBVideo) => v.site === 'YouTube')
           if (trailer?.key) setTrailerKey(trailer.key)
         } catch { /* ignore */ } finally {
           setLoading(false)

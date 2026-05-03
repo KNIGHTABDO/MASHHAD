@@ -41,7 +41,7 @@ export default function MyListPage() {
         setLoading(false)
 
         // Enrich with TMDB data
-        data.items.forEach(async (item: ListItem, idx: number) => {
+        data.items.forEach(async (item: ListItem) => {
           try {
             const type = item.content_type === 'series' ? 'tv' : 'movie'
             const tmdbRes = await fetch(`/api/tmdb/detail?id=${item.content_id}&type=${type}&lang=${lang}`)

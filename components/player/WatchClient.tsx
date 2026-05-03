@@ -801,7 +801,7 @@ export function WatchClient({
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [syncProgress]);
+  }, [syncProgress, contentId, episode, router, season, type]);
 
   // Fetch IntroDB segments
   useEffect(() => {

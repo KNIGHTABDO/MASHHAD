@@ -45,7 +45,7 @@ export default function HistoryPage() {
         setLoading(false)
 
         // Enrich with TMDB data
-        data.items.forEach(async (item: WatchItem, idx: number) => {
+        data.items.forEach(async (item: WatchItem) => {
           try {
             const type = item.content_type === 'episode' ? 'tv' : 'movie'
             const tmdbRes = await fetch(`/api/tmdb/detail?id=${item.content_id}&type=${type}&lang=${lang}`)
