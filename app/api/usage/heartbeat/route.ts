@@ -2,14 +2,24 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface ClerkSessionClaims {
+  metadata?: {
+    plan?: string;
+    isPro?: boolean;
+  };
+  plan?: string;
+  isPro?: boolean;
+  publicMetadata?: {
+    plan?: string;
+    isPro?: boolean;
+  };
+}
+
 export async function POST(request: Request) {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 🛡️ Robust Pro Check: Checks multiple paths in the JWT session claims
-  // This handles different Clerk JWT template configurations
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const claims = sessionClaims as any
+  const claims = sessionClaims as unknown as ClerkSessionClaims
   const isPro = 
     claims?.metadata?.plan === 'lifetime' || 
     claims?.metadata?.isPro === true ||
@@ -41,8 +51,7 @@ export async function GET() {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const claims = sessionClaims as any
+  const claims = sessionClaims as unknown as ClerkSessionClaims
   const isPro = 
     claims?.metadata?.plan === 'lifetime' || 
     claims?.metadata?.isPro === true ||
