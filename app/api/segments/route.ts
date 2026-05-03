@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
@@ -100,6 +101,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid segment' }, { status: 400 })
   }
 
+  const cookieStore = await cookies()
+  const profileId = cookieStore.get('active_profile_id')?.value
+
   const row = {
     content_id: body.content_id,
     content_type: body.content_type || 'episode',
@@ -108,7 +112,7 @@ export async function POST(request: Request) {
     segment_type: segmentType,
     start_sec: Math.max(0, Math.round(startSec)),
     end_sec: Math.max(0, Math.round(endSec)),
-    profile_id: user.id,
+    profile_id: profileId,
     vote_count: 1,
     verified: false,
   }
