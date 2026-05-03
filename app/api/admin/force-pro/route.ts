@@ -28,9 +28,9 @@ export async function POST() {
     })
 
     return NextResponse.json({ success: true, message: 'Pro status activated manually!' })
-  } catch (err: any) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    console.error('[Admin Force Pro] Error:', err.message)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const error = err as Error
+    console.error('[Admin Force Pro] Error:', error.message)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
