@@ -140,8 +140,6 @@ export default function UpgradePage() {
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }

@@ -4,27 +4,41 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useT } from '@/lib/i18n/context'
 import { useUser } from '@clerk/nextjs'
+import { usePathname } from 'next/navigation'
 
 export function PromotionModal() {
   const { lang } = useT()
   const { user } = useUser()
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
   const isPro = user?.publicMetadata?.plan === 'lifetime' || user?.publicMetadata?.isPro === true
 
   useEffect(() => {
-    // Only show for free users
+    // 1. Don't show if already Pro
     if (isPro) return
+    
+    // 2. Don't show on the upgrade page itself
+    if (pathname === '/upgrade') return
 
-    const hasDismissed = localStorage.getItem('mashhad_pro_dismissed')
-    if (!hasDismissed) {
+    // 3. Check permanent dismissal
+    const hasDismissedPermanent = localStorage.getItem('mashhad_pro_dismissed')
+    if (hasDismissedPermanent) return
+
+    // 4. Check 3-hour cooldown
+    const lastShown = localStorage.getItem('mashhad_pro_last_shown')
+    const threeHours = 3 * 60 * 60 * 1000
+    
+    if (!lastShown || (Date.now() - parseInt(lastShown)) > threeHours) {
       const timer = setTimeout(() => {
         setIsOpen(true)
-      }, 3000) // Show after 3 seconds
+        // Update the last shown timestamp
+        localStorage.setItem('mashhad_pro_last_shown', Date.now().toString())
+      }, 3000)
       return () => clearTimeout(timer)
     }
-  }, [isPro])
+  }, [isPro, pathname])
 
   const handleClose = () => {
     if (dontShowAgain) {
