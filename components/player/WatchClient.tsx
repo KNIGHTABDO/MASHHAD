@@ -769,7 +769,7 @@ export function WatchClient({
     const heartbeatInterval = setInterval(async () => {
       const isEmbed = streams[currentStreamIndex]?.type === "embed";
       const video = videoRef.current;
-      const isActuallyPlaying = isEmbed || (video && !video.paused && !isBuffering);
+      const isActuallyPlaying = (isEmbed || (video && !video.paused && !isBuffering)) && document.visibilityState !== 'hidden';
       
       if (isActuallyPlaying && !usageState.limitReached) {
         try {
