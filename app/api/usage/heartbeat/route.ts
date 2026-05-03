@@ -2,25 +2,24 @@ import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 
-interface ClerkMetadata {
-  plan?: string;
-  isPro?: boolean;
-}
-
 export async function POST(request: Request) {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Safely check for Pro status in Clerk metadata
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const metadata = (sessionClaims?.metadata || {}) as any
-  const isPro = metadata?.plan === 'lifetime' || metadata?.isPro === true
+  // 🛡️ Robust Pro Check: Checks multiple paths in the JWT session claims
+  // This handles different Clerk JWT template configurations
+  const claims = sessionClaims as any
+  const isPro = 
+    claims?.metadata?.plan === 'lifetime' || 
+    claims?.metadata?.isPro === true ||
+    claims?.plan === 'lifetime' ||
+    claims?.isPro === true ||
+    claims?.publicMetadata?.plan === 'lifetime';
 
   const { increment = 30 } = await request.json()
   
   const supabase = await createClient()
 
-  // If Pro, we still track usage for analytics, but the limit won't apply on the frontend
   const { data, error } = await supabase.rpc('increment_user_usage', {
     increment_seconds: increment
   })
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ 
     secondsWatchedToday: data, 
     isPro,
-    limitReached: !isPro && data > 18000 // 5 hours
+    limitReached: !isPro && data > 18000
   })
 }
 
@@ -41,9 +40,13 @@ export async function GET() {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const metadata = (sessionClaims?.metadata || {}) as any
-  const isPro = metadata?.plan === 'lifetime' || metadata?.isPro === true
+  const claims = sessionClaims as any
+  const isPro = 
+    claims?.metadata?.plan === 'lifetime' || 
+    claims?.metadata?.isPro === true ||
+    claims?.plan === 'lifetime' ||
+    claims?.isPro === true ||
+    claims?.publicMetadata?.plan === 'lifetime';
   
   const supabase = await createClient()
 

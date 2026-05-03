@@ -20,32 +20,44 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
   } catch (err: unknown) {
     const error = err as Error
-    console.error(`[Stripe Webhook] Error: ${error.message}`)
-    return NextResponse.json({ error: 'Webhook Error' }, { status: 400 })
+    console.error(`[Stripe Webhook] Signature Verification Failed: ${error.message}`)
+    return NextResponse.json({ error: `Webhook Error: ${error.message}` }, { status: 400 })
   }
 
-  // Handle the event
+  console.log(`[Stripe Webhook] Received event: ${event.type}`)
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.client_reference_id
 
-    if (userId) {
-      console.log(`[Stripe Webhook] Activating Pro for user: ${userId}`)
-      
+    console.log(`[Stripe Webhook] Session Info:`, {
+      id: session.id,
+      userId: userId,
+      paymentStatus: session.payment_status,
+      customerEmail: session.customer_details?.email
+    })
+
+    if (!userId) {
+      console.error(`[Stripe Webhook] CRITICAL: No client_reference_id found in session. Cannot upgrade user.`)
+      return NextResponse.json({ error: 'No User ID in session' }, { status: 400 })
+    }
+
+    try {
       const clerk = await clerkClient()
+      console.log(`[Stripe Webhook] Updating Clerk metadata for user: ${userId}`)
       
-      try {
-        await clerk.users.updateUserMetadata(userId, {
-          publicMetadata: {
-            plan: 'lifetime',
-            isPro: true
-          }
-        })
-        console.log(`[Stripe Webhook] Successfully activated Pro for ${userId}`)
-      } catch (clerkErr: unknown) {
-        console.error(`[Stripe Webhook] Failed to update Clerk metadata:`, clerkErr)
-        return NextResponse.json({ error: 'Clerk Error' }, { status: 500 })
-      }
+      await clerk.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          plan: 'lifetime',
+          isPro: true
+        }
+      })
+      
+      console.log(`[Stripe Webhook] SUCCESS: Pro activated for ${userId}`)
+    } catch (clerkErr: unknown) {
+      const error = clerkErr as Error
+      console.error(`[Stripe Webhook] Clerk Update Failed:`, error.message)
+      return NextResponse.json({ error: `Clerk Error: ${error.message}` }, { status: 500 })
     }
   }
 
