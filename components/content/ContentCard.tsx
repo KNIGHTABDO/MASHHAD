@@ -32,8 +32,9 @@ interface ContentCardProps {
 
 export function ContentCard({ item, mediaType: propMediaType, variant, index = 0, progressPercent }: ContentCardProps) {
   const [hovered, setHovered] = useState(false)
+  const [trailerKey, setTrailerKey] = useState<string | null>(null)
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { t } = useT()
+  const { t, lang } = useT()
   const title = item.title || item.name || ''
   const year = formatYear(item.release_date || item.first_air_date || '')
   
@@ -51,13 +52,28 @@ export function ContentCard({ item, mediaType: propMediaType, variant, index = 0
 
   function onMouseEnter() {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-    hoverTimeout.current = setTimeout(() => setHovered(true), 300)
+    hoverTimeout.current = setTimeout(async () => {
+      setHovered(true)
+      // Fetch trailer when hovered
+      if (!trailerKey) {
+        try {
+          const res = await fetch(`/api/tmdb/${mediaType}/${item.id}/videos?lang=${lang}`)
+          const data = await res.json()
+          // Only take YouTube videos
+          const trailer = data.results?.find((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')) || 
+                          data.results?.find((v: any) => v.site === 'YouTube')
+          if (trailer?.key) setTrailerKey(trailer.key)
+        } catch { /* ignore */ }
+      }
+    }, 400)
   }
 
   function onMouseLeave() {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current)
-    // Add a small grace period so the user can "cross the bridge" to the buttons
-    hoverTimeout.current = setTimeout(() => setHovered(false), 150)
+    // 400ms grace period to move mouse between the base card and the preview card
+    hoverTimeout.current = setTimeout(() => {
+      setHovered(false)
+    }, 400)
   }
 
   const itemVariants = {
@@ -136,21 +152,37 @@ export function ContentCard({ item, mediaType: propMediaType, variant, index = 0
           <motion.div
             {...scaleIn}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="absolute z-50 top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-80 bg-[#141414] border border-white/10 rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] pointer-events-auto"
+            className={`absolute z-50 top-1/2 -translate-y-1/2 w-80 bg-[#141414] border border-white/10 rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] pointer-events-auto
+              ${index === 0 ? 'left-0' : (index === 1 ? 'left-0' : 'left-1/2 -translate-x-1/2')}
+            `}
             style={{ willChange: 'transform, opacity' }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
           >
-            {/* Backdrop */}
-            <div className="relative aspect-video">
+            {/* Backdrop / Video Trailer */}
+            <div className="relative aspect-video bg-[#141414]">
+              {/* YouTube Thumbnail as high-quality fallback/base */}
               <Image
-                src={getTMDBImageUrl(item.backdrop_path, 'w780')}
+                src={trailerKey 
+                  ? `https://img.youtube.com/vi/${trailerKey}/maxresdefault.jpg` 
+                  : getTMDBImageUrl(item.backdrop_path, 'w780')}
                 alt={title}
                 fill
                 className="object-cover"
                 sizes="320px"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-transparent" />
+              
+              {trailerKey && (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${trailerKey}&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1&enablejsapi=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+                    className="w-full h-full scale-[1.35] opacity-0 animate-[fadeIn_0.4s_ease-in_forwards]"
+                    allow="autoplay; encrypted-media"
+                  />
+                </div>
+              )}
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-transparent pointer-events-none" />
               <div className="absolute bottom-2 start-3">
                  <div className="flex items-center gap-2">
                     <span className="bg-[#E50914] text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-lg">HD</span>

@@ -53,4 +53,7 @@ export const tmdb = {
 
   popular: (type: 'movie' | 'tv') =>
     tmdbFetch(`/${type}/popular`),
+
+  externalIds: (type: 'movie' | 'tv', id: string) =>
+    tmdbFetch(`/${type}/${id}/external_ids`),
 }

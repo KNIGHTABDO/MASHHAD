@@ -30,3 +30,23 @@ export async function GET() {
 
   return NextResponse.json({ items: Array.from(uniqueItems.values()) })
 }
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const contentId = searchParams.get('contentId')
+  const cookieStore = await cookies()
+  const profileId = cookieStore.get('active_profile_id')?.value
+  if (!profileId) return NextResponse.json({ error: 'No profile' }, { status: 401 })
+
+  const supabase = await createClient()
+
+  if (contentId) {
+    // Delete specific item
+    await supabase.from('watch_history').delete().eq('profile_id', profileId).eq('content_id', contentId)
+  } else {
+    // Clear all history
+    await supabase.from('watch_history').delete().eq('profile_id', profileId)
+  }
+
+  return NextResponse.json({ success: true })
+}

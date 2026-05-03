@@ -1,8 +1,6 @@
-import type { StreamCandidate, StreamResolveResult, StreamResult, StreamVariant } from '@/types/stream'
-import { fasselhdAdapter } from './fasselhd'
-import { vidbomAdapter, doodstreamAdapter, streamwishAdapter, filemoonAdapter } from './vidbom'
+import type { StreamCandidate, StreamResolveResult, StreamResult, StreamVariant, ServerAdapter } from '@/types/stream'
 import { flattenCandidates, resolveRealDebridCandidates } from './realdebrid'
-import { vidsrcAdapter } from './vidsrc'
+import { playimdbAdapter } from './playimdb'
 
 function variantFromStream(stream: StreamResult): StreamVariant {
   return {
@@ -71,8 +69,8 @@ export async function resolveStreamGraph(
 ): Promise<StreamResolveResult> {
   const PREMIUM_TIMEOUT = 8000 // 8s for premium sources
 
-  const premiumAdapters = [vidsrcAdapter]
-  const secondaryAdapters = [fasselhdAdapter, vidbomAdapter, doodstreamAdapter, streamwishAdapter, filemoonAdapter]
+  const premiumAdapters: ServerAdapter[] = [playimdbAdapter]
+  const secondaryAdapters: ServerAdapter[] = [] // Removed vidsrc and others as requested
 
   const candidates: StreamCandidate[] = []
 
@@ -132,8 +130,13 @@ export async function resolveStreamGraph(
   }
 
   candidates.sort((a, b) => {
-    if (a.isRealDebrid && !b.isRealDebrid) return -1
-    if (!a.isRealDebrid && b.isRealDebrid) return 1
+    // PlayIMDb always first
+    if (a.server === 'playimdb' && b.server !== 'playimdb') return -1
+    if (a.server !== 'playimdb' && b.server === 'playimdb') return 1
+
+    // Real-Debrid last (as per user request)
+    if (a.isRealDebrid && !b.isRealDebrid) return 1
+    if (!a.isRealDebrid && b.isRealDebrid) return -1
 
     if ((a.score || 0) !== (b.score || 0)) return (b.score || 0) - (a.score || 0)
 
@@ -145,10 +148,15 @@ export async function resolveStreamGraph(
   })
 
   const rankedCandidates = candidates.map((candidate, index) => ({ ...candidate, rank: index + 1 }))
-  const streams = [
-    ...flattenCandidates(rankedCandidates.filter(candidate => candidate.isRealDebrid)),
-    ...flattenLegacyCandidates(rankedCandidates.filter(candidate => !candidate.isRealDebrid)),
-  ]
+  
+  // Flatten while preserving the sorted order of candidates
+  const streams = rankedCandidates.flatMap(candidate => {
+    if (candidate.isRealDebrid) {
+      return flattenCandidates([candidate])
+    } else {
+      return flattenLegacyCandidates([candidate])
+    }
+  })
 
   return { streams, candidates: rankedCandidates }
 }

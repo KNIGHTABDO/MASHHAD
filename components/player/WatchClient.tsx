@@ -215,6 +215,11 @@ function getPlayerConfig(streams: StreamResult[]): {
   );
   const firstSafe = safeStreams[0] || streams[0];
 
+  // Prioritize embeds (PlayIMDb) if they are first in the list
+  if (firstSafe?.type === "embed") {
+    return { stream: firstSafe, playerType: "direct" };
+  }
+
   if (flags.hevcJs && !isIOS && !isSafari) {
     const hevcDash = safeStreams.find(
       (stream) => stream.type === "dash" && isHevcCandidate(stream),
@@ -243,6 +248,7 @@ export function WatchClient({
 }: WatchClientProps) {
   const router = useRouter();
   const { t, lang } = useT();
+  const { volume, setVolume, playbackRate, setPlaybackRate, setQuality } = usePlayerStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -258,6 +264,7 @@ export function WatchClient({
   const resolveStartedAt = useRef<number>(Date.now());
   const firstFrameSent = useRef(false);
   const bufferingStartedAt = useRef<number | null>(null);
+  const lastSyncTimeRef = useRef<number>(0);
   const featureFlags = useRef(getPlayerFeatureFlags());
   const mediaSupport = useRef(getMediaSupportSnapshot());
   const audioCodecCache = useRef<Map<string, string | null>>(new Map());
@@ -271,17 +278,29 @@ export function WatchClient({
   const ac3UrlRef = useRef<string | null>(null);
 
   // Safe play/pause to avoid AbortError
-  const safePlay = useCallback(() => {
+  const safePlay = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
-    const p = video.play();
-    if (p) {
-      playPromiseRef.current = p;
-      p.catch(() => {}).finally(() => {
-        playPromiseRef.current = null;
-      });
+    try {
+      // Try to unmute and play with volume
+      video.muted = false;
+      video.volume = 1;
+      setVolume(1);
+      const p = video.play();
+      if (p) {
+        playPromiseRef.current = p;
+        await p.catch(() => {
+          // If blocked, try muted play
+          video.muted = true;
+          return video.play();
+        }).finally(() => {
+          playPromiseRef.current = null;
+        });
+      }
+    } catch {
+      // ignored
     }
-  }, []);
+  }, [setVolume]);
 
   const safePause = useCallback(() => {
     const video = videoRef.current;
@@ -359,7 +378,6 @@ export function WatchClient({
   const hoverTooltipRef = useRef<HTMLDivElement>(null);
   const hoverRafRef = useRef<number | null>(null);
 
-  const { volume, setVolume, playbackRate, setPlaybackRate } = usePlayerStore();
   const showFallbackPrompt = useCallback(
     (reason: PlaybackFallbackReason, message: string) => {
       setFallbackPrompt({ reason, message });
@@ -380,7 +398,7 @@ export function WatchClient({
   const detectAudioCodec = useCallback(
     async (stream: StreamResult): Promise<string | null> => {
       const url = stream?.url;
-      if (!url) return null;
+      if (!url || stream.type === "embed") return null;
       if (audioCodecCache.current.has(url)) {
         return audioCodecCache.current.get(url) ?? null;
       }
@@ -671,8 +689,8 @@ export function WatchClient({
       const video = videoRef.current;
       if (!video && !isEmbed) return;
 
-      const prog = time ?? (video ? Math.floor(video.currentTime) : 0);
-      const dur = embedDuration ?? (video ? Math.floor(video.duration) : 0);
+      const prog = Math.round(time ?? (video ? video.currentTime : 0));
+      const dur = Math.round(embedDuration ?? (video ? video.duration : 0));
       if (prog < 2) return;
 
       const supabase = createClient();
@@ -719,17 +737,65 @@ export function WatchClient({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "MEDIA_DATA") {
-        const mediaData = event.data.data;
+      const data = event.data;
+      if (!data) return;
+
+      // 🎥 Monitor all iframe chatter for sync
+      if (typeof data === 'object') {
+        // Silent sync logging
+        // console.log("🎥 [IFRAME MESSAGE]:", data);
+      }
+
+      // 1. Handle PlayIMDb progress format & Episode Sync
+      if (data.type === "PLAYER_EVENT" && data.data) {
+        const info = data.data.player_info;
+        const progress = data.data.player_progress;
+        const duration = data.data.player_duration || 0;
+
+        // --- THE MAGIC: Auto-Follow Season/Episode Changes ---
+        if (type === "tv" && info && info.mediaType === "tv") {
+          const newS = Number(info.season);
+          const newE = Number(info.episode);
+          
+          // If the iframe moved to a different episode/season, update our URL to match
+          if ((newS !== season || newE !== episode) && newS > 0 && newE > 0) {
+            console.log(`🚀 [AUTO-SYNC]: Moving to S${newS}E${newE} to follow iframe`);
+            router.replace(`/watch/${contentId}?type=tv&season=${newS}&episode=${newE}`);
+            return; // Exit and let the router refresh the page state
+          }
+        }
+        
+        if (typeof progress === "number") {
+          lastKnownTime.current = progress;
+
+          // Throttle database saves to every 5 seconds
+          const now = Date.now();
+          if (now - lastSyncTimeRef.current > 5000) {
+            syncProgress(progress, duration);
+            lastSyncTimeRef.current = now;
+          }
+        }
+        return;
+      }
+
+      // 2. Handle legacy MEDIA_DATA format
+      if (data.type === "MEDIA_DATA") {
+        const mediaData = data.data;
         if (
           mediaData &&
           mediaData.progress &&
           typeof mediaData.progress.watched === "number"
         ) {
-          const duration =
-            mediaData.progress.duration || mediaData.progress.total || 0;
-          syncProgress(mediaData.progress.watched, duration);
-          lastKnownTime.current = mediaData.progress.watched;
+          const progress = mediaData.progress.watched;
+          const duration = mediaData.progress.duration || mediaData.progress.total || 0;
+          
+          lastKnownTime.current = progress;
+
+          const now = Date.now();
+          if (now - lastSyncTimeRef.current > 5000) {
+            syncProgress(progress, duration);
+            lastSyncTimeRef.current = now;
+          }
         }
       }
     };
@@ -840,9 +906,12 @@ export function WatchClient({
 
         setSubtitles(allSubs);
         if (resAr.subtitles?.length > 0) {
-          loadSubtitle(resAr.subtitles[0]);
+          // Sort by syncScore to get the best one
+          const bestAr = [...resAr.subtitles].sort((a, b) => (b.syncScore || 0) - (a.syncScore || 0))[0];
+          loadSubtitle({ ...bestAr, language: 'ar' });
         } else if (resEn.subtitles?.length > 0) {
-          loadSubtitle(resEn.subtitles[0]);
+          const bestEn = [...resEn.subtitles].sort((a, b) => (b.syncScore || 0) - (a.syncScore || 0))[0];
+          loadSubtitle({ ...bestEn, language: 'en' });
         }
       } catch (err) {
         console.error("[Subtitles fetch]", err);
@@ -1438,9 +1507,18 @@ export function WatchClient({
             .map((l, i) => ({
               id: i,
               label: l.height ? `${l.height}p` : `Level ${i}`,
+              height: l.height || 0
             }))
             .reverse();
           setHlsLevels(levels);
+          
+          // Auto choose highest quality
+          if (levels.length > 0) {
+            const highest = [...levels].sort((a, b) => b.height - a.height)[0];
+            hls.currentLevel = highest.id;
+            setQuality(highest.label);
+          }
+
           selectPreferredHlsAudioTrack(hls, cs);
           setIsChangingStream(false);
           safePlay();
@@ -2066,14 +2144,31 @@ export function WatchClient({
 
       {/* Video or Embed */}
       {cs?.type === "embed" ? (
-        <iframe
-          src={cs.url}
-          width="100%"
-          height="100%"
-          className="absolute inset-0 w-full h-full border-0 bg-black z-10"
-          allowFullScreen
-          referrerPolicy="origin"
-        />
+          <iframe
+            src={cs.url}
+            width="100%"
+            height="100%"
+            className="absolute inset-0 w-full h-full border-0 bg-black z-10"
+            allowFullScreen
+            referrerPolicy="origin"
+            sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts"
+            onLoad={(e) => {
+              // When iframe loads, try to send our saved state to it
+              const iframe = e.currentTarget;
+              if (!iframe.contentWindow) return;
+              
+              // 1. Set Arabic subtitles preference
+              iframe.contentWindow.postMessage({ type: "STORAGE_SET", key: "lastSubLang", value: "ara" }, "*");
+              
+              // 2. Try to resume from our database time
+              if (lastKnownTime.current > 0) {
+                iframe.contentWindow.postMessage({ 
+                  type: "SEEK", 
+                  data: lastKnownTime.current 
+                }, "*");
+              }
+            }}
+          />
       ) : (
         <video
           ref={videoRef}
@@ -2153,6 +2248,19 @@ export function WatchClient({
         </div>
       )}
 
+
+      {/* RD Warning Banner */}
+      {cs?.isRealDebrid && !loading && !error && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-yellow-500/90 backdrop-blur-md text-black px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-2xl">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          {lang === 'ar' ? 'سيرفر غير مستحسن - قد يكون بطيئاً' : 'Not Recommended Server - May be slow'}
+        </div>
+      )}
+
+
       {/* Controls */}
       <AnimatePresence>
         {controlsVisible && !loading && !error && (
@@ -2161,7 +2269,7 @@ export function WatchClient({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className={`absolute inset-0 flex flex-col justify-between ${cs?.type === "embed" ? "pointer-events-none z-20" : ""}`}
+            className={`absolute inset-0 flex flex-col justify-between ${cs?.type === "embed" ? "hidden" : "z-40"}`}
           >
             {/* Top bar */}
             <div
@@ -2470,7 +2578,7 @@ export function WatchClient({
                       initial={{ opacity: 0, y: 8, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                      className="absolute right-0 top-12 w-64 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10"
+                      className="absolute right-0 top-12 w-64 bg-black/90 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-50 border border-white/10 max-h-80 overflow-y-auto"
                     >
                       <div className="px-4 py-2 text-xs text-[#666] uppercase tracking-wider border-b border-white/10">
                         {t.player.availableStreams}
@@ -2495,7 +2603,12 @@ export function WatchClient({
                             {s.label}
                           </span>
                           <span className="flex items-center gap-1">
-                            {s.verifiedMatch && (
+                            {s.isRealDebrid && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-300">
+                                {lang === 'ar' ? 'غير مستحسن' : 'Not Recommended'}
+                              </span>
+                            )}
+                            {s.verifiedMatch && !s.isRealDebrid && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-300">
                                 {t.player.verifiedSource}
                               </span>
@@ -2562,7 +2675,7 @@ export function WatchClient({
             )}
 
             {/* Bottom controls */}
-            {cs?.type !== "embed" && (
+            {cs?.type !== "embed" ? (
               <div className="bg-linear-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-16 z-20 relative">
                 {/* Progress bar */}
                 <div className="group relative mb-3">
@@ -2870,10 +2983,42 @@ export function WatchClient({
                   </button>
                 </div>
               </div>
+            ) : (
+              <div className="bg-linear-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-16 z-20 relative pointer-events-none">
+                <div className="flex items-center justify-end p-4">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                      } else {
+                        containerRef.current?.requestFullscreen();
+                      }
+                    }}
+                    className="w-12 h-12 flex items-center justify-center text-white hover:text-[#E50914] transition-all hover:scale-110 pointer-events-auto bg-black/60 backdrop-blur-md rounded-full border border-white/10 shadow-2xl active:scale-90"
+                  >
+                    {isFullscreen ? (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                    ) : (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                    )}
+                  </button>
+                </div>
+              </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Back Button for Embeds */}
+      {cs?.type === "embed" && (
+        <button
+          onClick={() => router.back()}
+          className="absolute top-4 left-4 z-50 w-11 h-11 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white hover:bg-black/80 transition-all hover:scale-110"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+      )}
     </div>
   );
 }

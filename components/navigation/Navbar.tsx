@@ -25,6 +25,8 @@ export function Navbar() {
     { href: '/movies', label: t.nav.movies },
     { href: '/series', label: t.nav.series },
     { href: '/anime', label: t.nav.anime },
+    { href: '/my-list', label: t.nav.watchlist },
+    { href: '/history', label: t.nav.history },
   ]
   
   if (activeProfile?.role === 'admin') {
@@ -219,6 +221,22 @@ export function Navbar() {
                     >
                       <span className="group-hover:scale-125 transition-transform">👤</span> 
                       <span className="font-medium">{t.profiles.title}</span>
+                    </Link>
+                    <Link
+                      href="/my-list"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm text-[#B3B3B3] hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+                    >
+                      <span className="group-hover:scale-125 transition-transform">🔖</span>
+                      <span className="font-medium">{t.nav.watchlist}</span>
+                    </Link>
+                    <Link
+                      href="/history"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 text-sm text-[#B3B3B3] hover:text-white hover:bg-white/5 rounded-lg transition-all group"
+                    >
+                      <span className="group-hover:scale-125 transition-transform">⌛</span>
+                      <span className="font-medium">{t.nav.history}</span>
                     </Link>
                     <Link
                       href="/settings"

@@ -8,6 +8,7 @@ import { getTMDBImageUrl, formatYear, formatRuntime, formatRating } from '@/lib/
 import { getServerT } from '@/lib/i18n/server'
 import { WatchlistButton } from '@/components/content/WatchlistButton'
 import { DownloadButton } from '@/components/content/DownloadButton'
+import { TrailerButton } from '@/components/content/TrailerButton'
 import type { Movie } from '@/types/content'
 
 interface Props {
@@ -136,6 +137,7 @@ export default async function MovieDetailPage({ params }: Props) {
                 >
                   ▶ {progress > 30 ? (lang === 'ar' ? 'استئناف' : 'Resume') : t.content.watchNow}
                 </Link>
+                <TrailerButton tmdbId={movie.id} type="movie" label={t.content.viewTrailer} />
                 <DownloadButton tmdbId={String(movie.id)} type="movie" />
                 <WatchlistButton contentId={String(movie.id)} contentType="movie" />
               </div>

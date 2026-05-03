@@ -8,6 +8,7 @@ import { getTMDBImageUrl, formatYear, formatRating } from '@/lib/utils/format'
 import { getServerT } from '@/lib/i18n/server'
 import { EpisodeList } from '@/components/content/EpisodeList'
 import { WatchlistButton } from '@/components/content/WatchlistButton'
+import { TrailerButton } from '@/components/content/TrailerButton'
 import type { TVShow } from '@/types/content'
 
 interface Props {
@@ -117,6 +118,7 @@ export default async function SeriesDetailPage({ params }: Props) {
                 >
                   ▶ {hasHistory ? (lang === 'ar' ? `استئناف م${resumeSeason} ح${resumeEpisode}` : `Resume S${resumeSeason} E${resumeEpisode}`) : t.content.watchNow}
                 </Link>
+                <TrailerButton tmdbId={series.id} type="tv" label={t.content.viewTrailer} />
                 <WatchlistButton contentId={String(series.id)} contentType="series" />
               </div>
             </div>

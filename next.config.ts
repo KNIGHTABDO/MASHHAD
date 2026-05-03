@@ -21,10 +21,10 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' https://image.tmdb.org https://*.gravatar.com data:",
+      "img-src 'self' https://image.tmdb.org https://img.youtube.com https://*.ytimg.com https://s4.anilist.co https://*.gravatar.com data:",
       "font-src 'self' data:",
       "connect-src 'self' https://api.themoviedb.org https://api.real-debrid.com https://*.real-debrid.com https://*.stream.real-debrid.com https://*.real-debrid.cloud https://*.download.real-debrid.cloud https://*.supabase.co https://api.opensubtitles.com https://api.subdl.com https://*.strem.io",
-      "frame-src 'self' https://vidsrc.me https://vidbom.com https://*.vidbom.com https://*.dood.la https://*.dood.stream https://streamwish.com https://*.streamwish.com https://filemoon.sx https://*.filemoon.sx https://*.fasselhd.com",
+      "frame-src 'self' https://www.youtube.com https://*.youtube.com https://playimdb.com https://*.playimdb.com https://streamimdb.ru https://*.streamimdb.ru https://vidsrc.me https://vidbom.com https://*.vidbom.com https://*.dood.la https://*.dood.stream https://streamwish.com https://*.streamwish.com https://filemoon.sx https://*.filemoon.sx https://*.fasselhd.com",
       "media-src 'self' blob: https:",
     ].join("; "),
   },
@@ -54,6 +54,14 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "s4.anilist.co",
+      },
+      {
+        protocol: "https",
+        hostname: "img.youtube.com",
+      },
+      {
+        protocol: "https",
+        hostname: "i.ytimg.com",
       },
     ],
   },
