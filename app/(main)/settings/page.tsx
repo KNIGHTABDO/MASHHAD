@@ -63,6 +63,28 @@ export default function SettingsPage() {
             </a>
           </div>
 
+          {/* Admin section */}
+          {user?.emailAddresses[0]?.emailAddress === 'knight007youtu@gmail.com' && (
+            <div className="glass rounded-2xl p-6 mb-6 border border-amber-500/30">
+              <h2 className="text-lg font-bold text-amber-500 mb-4">Admin Controls</h2>
+              <button 
+                onClick={async () => {
+                  const res = await fetch('/api/admin/force-pro', { method: 'POST' });
+                  const data = await res.json();
+                  if (data.success) {
+                    alert('Pro Status Activated! Please refresh the page.');
+                    window.location.reload();
+                  } else {
+                    alert('Error: ' + data.error);
+                  }
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-black font-black py-3 rounded-xl transition-all text-sm"
+              >
+                Force Activate Pro Status
+              </button>
+            </div>
+          )}
+
           {/* Danger zone */}
           <div className="glass rounded-2xl p-6 border border-[rgba(229,9,20,0.2)]">
             <h2 className="text-lg font-bold text-[#E50914] mb-4">{lang === 'ar' ? 'منطقة الخطر' : 'Danger Zone'}</h2>

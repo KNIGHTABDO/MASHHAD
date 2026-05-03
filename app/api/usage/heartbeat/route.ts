@@ -8,6 +8,7 @@ export async function POST(request: Request) {
 
   // 🛡️ Robust Pro Check: Checks multiple paths in the JWT session claims
   // This handles different Clerk JWT template configurations
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const claims = sessionClaims as any
   const isPro = 
     claims?.metadata?.plan === 'lifetime' || 
@@ -40,6 +41,7 @@ export async function GET() {
   const { userId, sessionClaims } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const claims = sessionClaims as any
   const isPro = 
     claims?.metadata?.plan === 'lifetime' || 
