@@ -2,8 +2,6 @@
 
 import { motion } from 'framer-motion'
 import { useT } from '@/lib/i18n/context'
-import { Navbar } from '@/components/navigation/Navbar'
-import { Footer } from '@/components/navigation/Footer'
 import { useUser } from '@clerk/nextjs'
 
 const STRIPE_LINK = "https://buy.stripe.com/test_4gMeVd1S00x8cOKc9OeAg00"
@@ -21,7 +19,6 @@ export default function UpgradePage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
-      <Navbar />
       
       <main className="pt-32 pb-20 px-6 max-w-5xl mx-auto">
         <div className="text-center mb-16">
