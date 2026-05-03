@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
+import { cookies } from 'next/headers'
 
 // POST: Save a user's subtitle sync offset vote
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const cookieStore = await cookies()
+  const profileId = cookieStore.get('active_profile_id')?.value
+  if (!profileId) return NextResponse.json({ error: 'No profile' }, { status: 401 })
 
   const body = await request.json()
   const { subtitle_file_id, offset_ms } = body as {
@@ -23,7 +28,7 @@ export async function POST(request: Request) {
 
   const { error } = await supabase.from('subtitle_sync_votes').upsert(
     {
-      profile_id: userId,
+      profile_id: profileId,
       subtitle_file_id,
       offset_ms: clamped,
       content_id: typeof body.content_id === 'string' ? body.content_id : null,

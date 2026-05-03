@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { unzipSync } from 'fflate'
+import { createClient } from '@/lib/supabase/server'
 
 // Allowlist of legitimate subtitle CDN hostnames (SSRF protection)
 const ALLOWED_SUBTITLE_HOSTS = [
@@ -211,6 +212,8 @@ export async function GET(request: Request) {
   if (!userId) {
     return NextResponse.json({ subtitles: [] }, { status: 401 })
   }
+
+  const supabase = await createClient()
 
   const { searchParams } = new URL(request.url)
   const tmdbId = searchParams.get('tmdbId')
