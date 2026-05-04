@@ -32,13 +32,17 @@ export default async function WatchPage({ params, searchParams }: Props) {
         query.eq('season_number', parseInt(season)).eq('episode_number', parseInt(episode))
       }
 
-      const { data } = await query.order('watched_at', { ascending: false }).limit(1)
+      const { data, error } = await query.order('watched_at', { ascending: false }).limit(1)
+      
+      if (error) {
+        console.error('[WatchPage] Supabase error fetching history:', error.message)
+      }
 
       if (data && data.length > 0 && !data[0].completed) {
         initialProgress = data[0].progress_seconds || 0
       }
-    } catch {
-      // No existing watch history, start from 0
+    } catch (err) {
+      console.error('[WatchPage] Failed to fetch initial progress:', err)
     }
   }
 

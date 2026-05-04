@@ -750,7 +750,12 @@ export function WatchClient({
       if (prog < 2 || dur === 0) return; // Don't save if we somehow lost duration
 
       const token = await getToken({ template: 'supabase' });
-      const supabase = createClient(token || undefined);
+      if (!token) {
+        console.warn("[WatchClient] No Supabase token available from Clerk. Progress will not be saved.");
+        return;
+      }
+
+      const supabase = createClient(token);
       const row: Record<string, unknown> = {
         profile_id: profileId,
         content_id: contentId,
@@ -765,7 +770,9 @@ export function WatchClient({
         row.episode_number = episode ?? null;
       }
 
-      const { data } = await supabase
+      console.log(`[WatchClient] Syncing progress: ${prog}/${dur}s for ${contentId}`);
+
+      const { data, error: fetchError } = await supabase
         .from("watch_history")
         .select("id")
         .eq("profile_id", profileId)
@@ -774,10 +781,17 @@ export function WatchClient({
         .order("watched_at", { ascending: false })
         .limit(1);
 
+      if (fetchError) {
+        console.error("[WatchClient] Error fetching history record:", fetchError.message);
+        return;
+      }
+
       if (data && data.length > 0) {
-        await supabase.from("watch_history").update(row).eq("id", data[0].id);
+        const { error: updateError } = await supabase.from("watch_history").update(row).eq("id", data[0].id);
+        if (updateError) console.error("[WatchClient] Error updating history:", updateError.message);
       } else {
-        await supabase.from("watch_history").insert(row);
+        const { error: insertError } = await supabase.from("watch_history").insert(row);
+        if (insertError) console.error("[WatchClient] Error inserting history:", insertError.message);
       }
     },
     [profileId, contentId, type, season, episode, duration, getToken],
