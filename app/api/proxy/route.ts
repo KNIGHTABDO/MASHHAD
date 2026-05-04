@@ -64,8 +64,9 @@ export async function GET(req: NextRequest) {
         'Cache-Control': 'public, max-age=3600',
       },
     });
-  } catch (error: any) {
-    console.error('[Proxy Bridge] Error:', error.message);
-    return new NextResponse(error.message, { status: 500 });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Proxy Bridge] Error:', errorMessage);
+    return new NextResponse(errorMessage, { status: 500 });
   }
 }
