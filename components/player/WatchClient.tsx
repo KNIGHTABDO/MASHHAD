@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePlayerStore } from "@/store/playerStore";
 import { useT } from "@/lib/i18n/context";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@clerk/nextjs";
 import {
   getMediaSupportSnapshot,
   getPlayerFeatureFlags,
@@ -154,7 +155,14 @@ function selectPreferredHlsAudioTrack(
   const preferred = normalizeLanguageCode(
     stream.selectedAudioLanguage || stream.originalLanguage,
   );
-  if (!preferred || !hls.audioTracks?.length) return;
+  // If there are audio tracks but none matches a preference, always select track 0
+  // so the stream is audible (important for EgyDead which has a single audio track).
+  if (!hls.audioTracks?.length) return;
+
+  if (!preferred) {
+    if (hls.audioTrack !== 0) hls.audioTrack = 0;
+    return;
+  }
 
   const idx = hls.audioTracks.findIndex((track) => {
     const langCode = normalizeLanguageCode(track.lang || "");
@@ -167,8 +175,10 @@ function selectPreferredHlsAudioTrack(
     );
   });
 
-  if (idx >= 0 && hls.audioTrack !== idx) {
-    hls.audioTrack = idx;
+  // If no matching track found, still force track 0 so audio is never silent
+  const target = idx >= 0 ? idx : 0;
+  if (hls.audioTrack !== target) {
+    hls.audioTrack = target;
   }
 }
 
@@ -230,6 +240,11 @@ function getPlayerConfig(streams: StreamResult[]): {
     }
   }
 
+  const egydead = streams.find(s => s.server === 'egydead');
+  if (egydead) {
+    return { stream: egydead, playerType: playerTypeFor(egydead) };
+  }
+
   const primary = firstSafe;
   if (!primary) {
     return { stream: streams[0], playerType: "direct" };
@@ -249,6 +264,7 @@ export function WatchClient({
 }: WatchClientProps) {
   const router = useRouter();
   const { t, lang } = useT();
+  const { getToken } = useAuth();
   const { volume, setVolume, playbackRate, setPlaybackRate, setQuality } = usePlayerStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -695,13 +711,18 @@ export function WatchClient({
       if (!profileId) return;
       const isEmbed = streams[currentStreamIndex]?.type === "embed";
       const video = videoRef.current;
-      if (!video && !isEmbed) return;
+      // Removed `if (!video && !isEmbed) return` to allow unmount saving!
 
-      const prog = Math.round(time ?? (video ? video.currentTime : 0));
-      const dur = Math.round(embedDuration ?? (video ? video.duration : 0));
-      if (prog < 2) return;
+      let prog = Math.round(time ?? (video ? video.currentTime : lastKnownTime.current));
+      if (!isFinite(prog) || isNaN(prog)) prog = 0;
+      
+      let dur = Math.round(embedDuration ?? (video ? video.duration : duration));
+      if (!isFinite(dur) || isNaN(dur)) dur = 0;
+      
+      if (prog < 2 || dur === 0) return; // Don't save if we somehow lost duration
 
-      const supabase = createClient();
+      const token = await getToken({ template: 'supabase' });
+      const supabase = createClient(token || undefined);
       const row: Record<string, unknown> = {
         profile_id: profileId,
         content_id: contentId,
@@ -918,8 +939,27 @@ export function WatchClient({
   );
 
   // ── Fetch subtitles (Arabic + English) ───────────────────────────
+  // Skip entirely when EgyDead is active — it embeds Arabic subtitles in the video
+  const isEgyDead = streams[currentStreamIndex]?.server === 'egydead';
+
   useEffect(() => {
     async function fetchSubs() {
+      // Don't fetch until we know what stream we are playing
+      if (streams.length === 0) return;
+
+      // EgyDead streams already have baked-in Arabic subtitles — skip our system
+      if (streams[currentStreamIndex]?.server === 'egydead') {
+        setSubtitles([]);
+        setActiveSub(null);
+        setSubsLoading(false);
+        
+        // Ensure we purge any tracks that might have been injected before switching
+        if (videoRef.current) {
+          const existing = videoRef.current.querySelectorAll("track");
+          existing.forEach((t) => t.remove());
+        }
+        return;
+      }
       setSubsLoading(true);
       try {
         const streamFile = currentFileName;
@@ -1515,6 +1555,7 @@ export function WatchClient({
     if (
       featureFlags.current.mediabunnyAc3 &&
       cs?.type !== "embed" &&
+      cs?.isRealDebrid &&
       (cs.type !== "mp4" || isUnsupportedAudioCandidate(cs))
     ) {
       detectAudioCodec(cs)
@@ -1550,7 +1591,13 @@ export function WatchClient({
           safePlay();
           return;
         }
+        const startPos = (!hasResumed.current && lastKnownTime.current > 0) ? lastKnownTime.current : -1;
+        if (startPos > 0) {
+          hasResumed.current = true;
+        }
+
         const hls = new Hls({
+          startPosition: startPos,
           enableWorker: true,
           maxBufferLength: 15,
           maxMaxBufferLength: 30,
@@ -1736,6 +1783,34 @@ export function WatchClient({
       }
     }
   }, [currentStreamIndex, streams]);
+
+  // ── Embed Progress Listener ──────────────────────────────────────
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Handle progress from various embed players (vidsrc, playimdb, etc.)
+      const data = event.data;
+      if (data?.type === "MEDIA_PROGRESS" || data?.event === "timeupdate") {
+        const time = data.currentTime || data.time || data.data?.time;
+        const duration = data.duration || data.data?.duration;
+        
+        if (typeof time === "number") {
+          lastKnownTime.current = time;
+          setCurrentTime(time);
+          if (duration) setDuration(duration);
+          
+          // Throttle sync to database
+          const now = Date.now();
+          if (now - lastSyncTimeRef.current > 5000) {
+            lastSyncTimeRef.current = now;
+            syncProgress(time, duration);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [syncProgress]);
 
   // ── Resume playback ──────────────────────────────────────────────
   useEffect(() => {
@@ -2334,7 +2409,7 @@ export function WatchClient({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className={`absolute inset-0 flex flex-col justify-between ${cs?.type === "embed" ? "hidden" : "z-40"}`}
+            className="absolute inset-0 flex flex-col justify-between z-40"
           >
             {/* Top bar */}
             <div
@@ -2422,6 +2497,8 @@ export function WatchClient({
                     </div>
                   )}
 
+                  {/* Subtitle button — hidden when EgyDead is active (subtitles baked in) */}
+                  {!isEgyDead && (
                   <div className="relative">
                     <button
                       onClick={() => {
@@ -2611,6 +2688,7 @@ export function WatchClient({
                       )}
                     </AnimatePresence>
                   </div>
+                  )} {/* end !isEgyDead subtitle button */}
                 </div>
               )}
               {/* Server selector */}
@@ -2668,6 +2746,11 @@ export function WatchClient({
                             {s.label}
                           </span>
                           <span className="flex items-center gap-1">
+                            {s.server === 'egydead' && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">
+                                {lang === 'ar' ? 'مستحسن' : 'Recommended'}
+                              </span>
+                            )}
                             {s.isRealDebrid && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-300">
                                 {lang === 'ar' ? 'غير مستحسن' : 'Not Recommended'}

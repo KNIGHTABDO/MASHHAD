@@ -42,7 +42,7 @@ export function ContinueWatchingRow() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/continue-watching')
+        const res = await fetch(`/api/continue-watching?t=${Date.now()}`)
         const data = await res.json()
         if (!data.items?.length) {
           setLoading(false)
@@ -143,7 +143,7 @@ export function MyListRow() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/watchlist')
+        const res = await fetch(`/api/watchlist?t=${Date.now()}`)
         const data = await res.json()
         if (!data.items?.length) {
           setLoading(false)
@@ -225,7 +225,7 @@ export function RecommendedRow() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/continue-watching')
+        const res = await fetch(`/api/continue-watching?t=${Date.now()}`)
         const data = await res.json()
         const recentItem = data.items?.find((i: WatchItem) => i.progress_seconds > 0)
         

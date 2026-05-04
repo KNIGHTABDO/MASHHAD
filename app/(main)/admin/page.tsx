@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@/lib/supabase/server'
 import { getServerT } from '@/lib/i18n/server'
+import { UserManagement } from '@/components/admin/UserManagement'
 
 export default async function AdminDashboardPage() {
   const { t } = await getServerT()
@@ -24,7 +25,7 @@ export default async function AdminDashboardPage() {
   if (activeProfile?.role !== 'admin') redirect('/')
 
   // Fetch stats using RLS-bypassed policies (since we are admin)
-  const { count: usersCount } = await supabase
+  const { count: profilesCount } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
 
@@ -36,20 +37,25 @@ export default async function AdminDashboardPage() {
     .limit(10)
 
   return (
-    <div className="min-h-screen pt-24 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto" style={{ maxWidth: '1400px' }}>
-        <h1 className="text-3xl font-black mb-8">{t.admin?.dashboard || 'Admin Dashboard'}</h1>
+    <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto space-y-12" style={{ maxWidth: '1400px' }}>
+        <h1 className="text-4xl font-black">{t.admin?.dashboard || 'Admin Dashboard'}</h1>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Stats Card */}
-          <div className="glass rounded-2xl p-6 border" style={{ borderColor: 'var(--border-subtle)' }}>
-            <h3 className="text-[#B3B3B3] text-sm font-medium mb-2">{t.admin?.totalUsers || 'Total Users'}</h3>
-            <p className="text-4xl font-bold text-white">{usersCount ?? 0}</p>
+          <div className="glass rounded-2xl p-6 border transition-transform hover:scale-[1.02]" style={{ borderColor: 'var(--border-subtle)' }}>
+            <h3 className="text-[#B3B3B3] text-sm font-medium mb-2">{t.admin?.totalProfiles || 'Total Profiles'}</h3>
+            <p className="text-4xl font-bold text-white">{profilesCount ?? 0}</p>
           </div>
         </div>
 
+        {/* User Management Section */}
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <UserManagement />
+        </section>
+
         {/* Recent Activity */}
-        <section>
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
           <h2 className="text-xl font-bold mb-6">{t.admin?.recentActivity || 'Recent Activity'}</h2>
           <div className="glass rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border-subtle)' }}>
             <div className="overflow-x-auto">
@@ -66,7 +72,6 @@ export default async function AdminDashboardPage() {
                   {recentWatches?.map(watch => (
                     <tr key={watch.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4 font-medium">
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                         {(watch.profiles as any)?.name || 'Unknown'}
                       </td>
                       <td className="px-6 py-4">{watch.content_id}</td>
@@ -96,3 +101,4 @@ export default async function AdminDashboardPage() {
     </div>
   )
 }
+

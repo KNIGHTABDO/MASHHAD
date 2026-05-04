@@ -1,6 +1,7 @@
 import type { StreamCandidate, StreamResolveResult, StreamResult, StreamVariant, ServerAdapter } from '@/types/stream'
 import { flattenCandidates, resolveRealDebridCandidates } from './realdebrid'
 import { playimdbAdapter } from './playimdb'
+import { egydeadAdapter } from './egydead'
 
 function variantFromStream(stream: StreamResult): StreamVariant {
   return {
@@ -69,7 +70,7 @@ export async function resolveStreamGraph(
 ): Promise<StreamResolveResult> {
   const PREMIUM_TIMEOUT = 8000 // 8s for premium sources
 
-  const premiumAdapters: ServerAdapter[] = [playimdbAdapter]
+  const premiumAdapters: ServerAdapter[] = [playimdbAdapter, egydeadAdapter]
   const secondaryAdapters: ServerAdapter[] = [] // Removed vidsrc and others as requested
 
   const candidates: StreamCandidate[] = []
@@ -130,7 +131,11 @@ export async function resolveStreamGraph(
   }
 
   candidates.sort((a, b) => {
-    // PlayIMDb always first
+    // EgyDead always first (User request)
+    if (a.server === 'egydead' && b.server !== 'egydead') return -1
+    if (a.server !== 'egydead' && b.server === 'egydead') return 1
+
+    // PlayIMDb second
     if (a.server === 'playimdb' && b.server !== 'playimdb') return -1
     if (a.server !== 'playimdb' && b.server === 'playimdb') return 1
 

@@ -25,17 +25,17 @@
 
 ## 📖 Overview
 
-Mashhad is a full-stack Arabic streaming platform that aggregates content from multiple streaming APIs (Real-Debrid, VidSrc, Torrentio), provides intelligent subtitle synchronization from 3 sources (SubDL, OpenSubtitles, Stremio), and delivers a bilingual (Arabic/English) cinematic experience.
+Mashhad is a full-stack Arabic streaming platform that aggregates content from multiple streaming APIs (Real-Debrid, EgyDead, VidSrc, Torrentio), provides intelligent subtitle synchronization from 3 sources (SubDL, OpenSubtitles, Stremio), and delivers a bilingual (Arabic/English) cinematic experience.
 
 ### What makes it different?
 
 | Feature | Description |
 |---|---|
-| 🎬 **Multi-source streaming** | Real-Debrid cached torrents + VidSrc fallback with auto failover |
+| 🎬 **Multi-source streaming** | Real-Debrid cached torrents + EgyDead MP4s + VidSrc fallback |
 | 🗣 **Smart Arabic subtitles** | 3-source subtitle engine with release-group sync scoring |
 | 🌍 **True bilingual** | Arabic ↔ English with RTL/LTR, zero hardcoded strings, server-side re-fetch |
 | 📺 **Netflix-grade UX** | Multi-profile, Continue Watching, Skip Intro, Post-playback screen |
-| 🔒 **Secure by design** | Supabase RLS on every table, API auth guards, SSRF protection |
+| 🔒 **Secure by design** | Clerk Auth + Supabase RLS, API auth guards, SSRF protection |
 | 📱 **Fully responsive** | Cinematic landing page, mobile-first UI, GPU-promoted scroll containers |
 
 ---
@@ -44,8 +44,9 @@ Mashhad is a full-stack Arabic streaming platform that aggregates content from m
 
 ### 🎥 Multi-Source Streaming Engine
 - **Real-Debrid** — Torrentio → magnet hashes → RD instant availability → unrestrict → direct MKV + HLS
+- **EgyDead** — Direct embedded extraction of HLS/MP4 streams from hosters (like Forafile) via JavaScript unpacking
 - **VidSrc Embed** — Ad-free fallback embed player with `postMessage` progress tracking
-- **Smart Fallback Chain** — Auto-advances: Direct MKV → HLS → VidSrc embed on any error
+- **Smart Fallback Chain** — Auto-advances: Direct MKV/MP4 → HLS → VidSrc embed on any error
 - **Parallel Orchestrator** — All adapters run concurrently with an 8s timeout for fastest resolution
 - **Quality Selector** — Users can browse and switch between available stream qualities
 
@@ -114,7 +115,8 @@ Mashhad is a full-stack Arabic streaming platform that aggregates content from m
 | React | React | 19.1 |
 | Styling | Tailwind CSS | 4.x |
 | Animations | Framer Motion | 12.x |
-| Database & Auth | Supabase (PostgreSQL + RLS) | 2.x |
+| Database | Supabase (PostgreSQL + RLS) | 2.x |
+| Authentication | Clerk (with Supabase JWT Template) | 7.x |
 | Server State | TanStack React Query | 5.x |
 | Client State | Zustand | 5.x |
 | Video | Custom HTML5 Player + HLS.js | 1.6 |
@@ -156,7 +158,11 @@ npm install
 Create `.env.local` in the project root:
 
 ```env
-# Supabase (required)
+# Clerk Auth (required)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_pub_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+
+# Supabase (required - JWT template mapped from Clerk)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 

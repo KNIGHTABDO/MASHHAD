@@ -10,7 +10,7 @@
 
 ## Project Overview
 
-Mashhad is a full-stack Arabic streaming platform that aggregates content from multiple streaming APIs (Real-Debrid, VidSrc, Torrentio), provides intelligent subtitle synchronization from 3 sources (SubDL, OpenSubtitles, Stremio), and delivers a bilingual (Arabic/English) cinematic UI. It does NOT host any media content — it is an aggregation interface only.
+Mashhad is a full-stack Arabic streaming platform that aggregates content from multiple streaming APIs (Real-Debrid, EgyDead, VidSrc, Torrentio), provides intelligent subtitle synchronization from 3 sources (SubDL, OpenSubtitles, Stremio), and delivers a bilingual (Arabic/English) cinematic UI. It does NOT host any media content — it is an aggregation interface only.
 
 **Live deployment:** `mashhad-web.vercel.app` (Vercel auto-deploy from `main` branch)  
 **Repo:** `github.com/KNIGHTABDO/MASHHAD`
@@ -43,7 +43,11 @@ npm run lint
 All required in `.env.local` (NEVER commit this file):
 
 ```env
-# Supabase (required)
+# Clerk Auth (required)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-pub-key>
+CLERK_SECRET_KEY=<clerk-secret-key>
+
+# Supabase (required - JWT template mapped from Clerk)
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
 
@@ -72,7 +76,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 | React | React | 19.1 |
 | Styling | Tailwind CSS | 4.x |
 | Animations | Framer Motion | 12.x |
-| Database & Auth | Supabase (PostgreSQL + RLS) | 2.x |
+| Database | Supabase (PostgreSQL + RLS) | 2.x |
+| Authentication | Clerk (with Supabase JWT Template) | 7.x |
 | Server State | TanStack React Query | 5.x |
 | Client State | Zustand | 5.x |
 | Video | Custom HTML5 Player + HLS.js | 1.6 |
@@ -213,9 +218,10 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 | Machine translated | −10 | Usually desynced |
 
 ### Authentication & Profiles
-- **Supabase Auth** with email/password only (no social login)
-- **Multi-profile:** Up to 5 profiles per account, each with independent watch history
-- **Session flow:** Login → Profile Picker → Main App
+- **Clerk Auth** handles sign-in, sign-up, and session management.
+- **Supabase Integration:** Uses Clerk JWT templates. `createClient()` must receive the Clerk token via `getToken({ template: 'supabase' })` to pass RLS policies.
+- **Multi-profile:** Up to 5 profiles per account in Supabase, each with independent watch history.
+- **Session flow:** Clerk Login → Profile Picker → Main App
 - **Active profile:** Stored in HTTP cookie `active_profile_id` (read by middleware and API routes)
 - **Profile switch:** Uses `window.location.href = '/'` (NOT `router.push`) — middleware needs a fresh cookie read
 

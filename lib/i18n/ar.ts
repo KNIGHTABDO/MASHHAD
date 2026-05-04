@@ -156,6 +156,7 @@ export const ar = {
   admin: {
     dashboard: "لوحة تحكم الإدارة",
     totalUsers: "إجمالي المستخدمين",
+    totalProfiles: "إجمالي الملفات الشخصية",
     recentActivity: "النشاط الأخير",
     platformStats: "إحصائيات المنصة",
   },

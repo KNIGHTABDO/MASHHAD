@@ -158,6 +158,7 @@ export const en = {
   admin: {
     dashboard: "Admin Dashboard",
     totalUsers: "Total Users",
+    totalProfiles: "Total Profiles",
     recentActivity: "Recent Activity",
     platformStats: "Platform Stats",
   },

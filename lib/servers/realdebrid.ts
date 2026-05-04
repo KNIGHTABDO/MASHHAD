@@ -416,7 +416,7 @@ async function fetchTorrentioCandidates(
   const res = await fetch(
     `https://torrentio.strem.fun/stream/${stremioType}/${imdbId}${episodePart}.json`,
     {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(7500),
     },
   );
   if (!res.ok) return [];
