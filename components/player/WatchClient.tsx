@@ -299,17 +299,14 @@ export function WatchClient({
     const video = videoRef.current;
     if (!video) return;
     try {
-      // Try to unmute and play with volume
       video.muted = false;
-      video.volume = 1;
-      setVolume(1);
       const p = video.play();
       if (p) {
         playPromiseRef.current = p;
-        await p.catch(() => {
-          // If blocked, try muted play
-          video.muted = true;
-          return video.play();
+        await p.catch((err) => {
+          console.warn("[WatchClient] Autoplay blocked by browser. User must click Play.", err);
+          setIsPlaying(false);
+          setControlsVisible(true);
         }).finally(() => {
           playPromiseRef.current = null;
         });
@@ -317,7 +314,7 @@ export function WatchClient({
     } catch {
       // ignored
     }
-  }, [setVolume]);
+  }, []);
 
   const safePause = useCallback(() => {
     const video = videoRef.current;
@@ -1478,6 +1475,7 @@ export function WatchClient({
       });
       const data = await res.json();
       if (data.streams?.length > 0) {
+        hasResumed.current = false;
         setStreams(data.streams);
         firstFrameSent.current = false;
         const cfg = getPlayerConfig(data.streams);

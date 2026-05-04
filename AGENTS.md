@@ -61,6 +61,9 @@ REALDEBRID_API_TOKEN=<real-debrid-api-token>
 OPENSUBTITLES_API_KEY=<opensubtitles-rest-api-key>
 SUBDL_API_KEY=<subdl-api-key>
 
+# ScraperAPI (required for bypassing Cloudflare on Vercel)
+SCRAPERAPI_KEY=<scraperapi-key>
+
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -69,21 +72,21 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 ## Tech Stack
 
-| Layer | Technology | Version |
-|---|---|---|
-| Framework | Next.js (App Router) | 15.5 |
-| Language | TypeScript (strict mode) | 5.x |
-| React | React | 19.1 |
-| Styling | Tailwind CSS | 4.x |
-| Animations | Framer Motion | 12.x |
-| Database | Supabase (PostgreSQL + RLS) | 2.x |
-| Authentication | Clerk (with Supabase JWT Template) | 7.x |
-| Server State | TanStack React Query | 5.x |
-| Client State | Zustand | 5.x |
-| Video | Custom HTML5 Player + HLS.js | 1.6 |
-| Subtitles | fflate (zip), custom converters | 0.8 |
-| Font | Thmanyah Sans (local woff2) | — |
-| Deployment | Vercel | — |
+| Layer          | Technology                         | Version |
+| -------------- | ---------------------------------- | ------- |
+| Framework      | Next.js (App Router)               | 15.5    |
+| Language       | TypeScript (strict mode)           | 5.x     |
+| React          | React                              | 19.1    |
+| Styling        | Tailwind CSS                       | 4.x     |
+| Animations     | Framer Motion                      | 12.x    |
+| Database       | Supabase (PostgreSQL + RLS)        | 2.x     |
+| Authentication | Clerk (with Supabase JWT Template) | 7.x     |
+| Server State   | TanStack React Query               | 5.x     |
+| Client State   | Zustand                            | 5.x     |
+| Video          | Custom HTML5 Player + HLS.js       | 1.6     |
+| Subtitles      | fflate (zip), custom converters    | 0.8     |
+| Font           | Thmanyah Sans (local woff2)        | —       |
+| Deployment     | Vercel                             | —       |
 
 ---
 
@@ -181,6 +184,7 @@ mashhad/
 ```
 
 ### New Route Groups
+
 - **`app/(landing)/landing/page.tsx`** — Public cinematic landing page. No auth required. Uses real TMDB trending posters fetched client-side. Fully mobile-responsive. Contains `HeroSection` (scroll-scrubbed video), animated stats counters, `TiltCard` 3D poster grid, feature sections, and CTA.
 - **`app/(main)/anime/page.tsx`** — Dedicated anime section using TMDB discover with `with_genres=16` (Animation) and `with_origin_country=JP`.
 
@@ -189,6 +193,7 @@ mashhad/
 ## Architecture & Key Patterns
 
 ### Streaming Pipeline
+
 1. Client requests streams via `GET /api/stream/resolve?tmdbId=&type=movie|episode`
 2. Server orchestrator runs all adapters in parallel with 8s timeout
 3. **Real-Debrid flow:** Torrentio → magnet hashes → RD instant availability → addMagnet → selectFiles → unrestrict → returns direct MKV URL + HLS URL + actual filename
@@ -197,6 +202,7 @@ mashhad/
 6. `video.onError` triggers `tryNextStream()` for automatic fallback
 
 ### Language System (Important — Read Carefully)
+
 - **Cookie:** `mashhad-lang=ar|en` — set client-side, read by server components and API routes
 - **Client state:** `useT()` hook provides `{ t, lang, setLang, dir }`
 - **Language switch:** `setLang()` → updates state + localStorage + cookie + `router.refresh()`
@@ -207,17 +213,19 @@ mashhad/
 - **Direction:** `dir="rtl"` for Arabic, `dir="ltr"` for English — set on `<html>` by `applyLang()`
 
 ### Subtitle Sync Scoring
+
 The subtitle engine scores each result against `StreamResult.fileName` (the actual video filename from Real-Debrid):
 
-| Factor | Points | Why |
-|---|---|---|
-| Release group match (NTb, FLUX) | +20 | Same encoder = same frame timing |
-| Release tag overlap (WEB-DL, x264) | up to +15 | Same source = same cut |
-| Resolution match (1080p) | +5 | Same encode |
-| Download count | up to +5 | Community validation |
-| Machine translated | −10 | Usually desynced |
+| Factor                             | Points    | Why                              |
+| ---------------------------------- | --------- | -------------------------------- |
+| Release group match (NTb, FLUX)    | +20       | Same encoder = same frame timing |
+| Release tag overlap (WEB-DL, x264) | up to +15 | Same source = same cut           |
+| Resolution match (1080p)           | +5        | Same encode                      |
+| Download count                     | up to +5  | Community validation             |
+| Machine translated                 | −10       | Usually desynced                 |
 
 ### Authentication & Profiles
+
 - **Clerk Auth** handles sign-in, sign-up, and session management.
 - **Supabase Integration:** Uses Clerk JWT templates. `createClient()` must receive the Clerk token via `getToken({ template: 'supabase' })` to pass RLS policies.
 - **Multi-profile:** Up to 5 profiles per account in Supabase, each with independent watch history.
@@ -226,6 +234,7 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 - **Profile switch:** Uses `window.location.href = '/'` (NOT `router.push`) — middleware needs a fresh cookie read
 
 ### Watch Progress (Continue Watching)
+
 - Saves to `watch_history` every 5 seconds during playback
 - Supports movies (`content_type: 'movie'`) and TV episodes (`content_type: 'episode'`)
 - Deduplicates by `content_id` — shows only the most recent entry per content
@@ -233,6 +242,7 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 - VidSrc embed progress tracked via `postMessage` listener
 
 ### Performance Patterns
+
 - **Scroll debouncing:** `onScroll` in `ContentRow` uses `requestAnimationFrame` to batch 2 setState calls — prevents 12 synchronous re-renders per scroll tick
 - **GPU promotion:** `overflow-y: clip` on scroll containers preserves the `translateZ(0)` compositor layer — `overflow-y: visible` defeats it
 - **Card hover:** `will-change: transform` on card wrappers pre-promotes GPU layer before hover triggers `backdrop-filter: blur()`
@@ -240,10 +250,12 @@ The subtitle engine scores each result against `StreamResult.fileName` (the actu
 - **Splash screen:** State initialized as `null` (not `true`) so nothing renders until `useEffect` checks `sessionStorage`
 
 ### Algorithmic Recommendations & Downloads
+
 - **Recommendations:** `<RecommendedRow>` fetches `watch_history` to find the last watched item, then proxies a request to `/api/tmdb/{type}/{id}/recommendations` to render a personalized "Because you watched..." row.
 - **Offline Downloads:** `<DownloadButton>` triggers the same stream resolution pipeline but filters for `isRealDebrid && type === 'mp4'`. It presents a dropdown menu of qualities, and `window.open` is used to trigger native browser downloads for the direct MKV/MP4 URLs.
 
 ### Landing Page Pattern
+
 The landing page at `/landing` is **fully public** — no Supabase session required.
 
 - **TMDB trending posters** — fetched client-side from `/api/tmdb/trending/movie/week` which is exempt from auth in both the API route and the middleware.
@@ -254,7 +266,9 @@ The landing page at `/landing` is **fully public** — no Supabase session requi
 - **Mobile animations** — All Framer Motion entry animations in the landing page use `y`-axis (`initial={{ y: 20 }}`) not `x`-axis to prevent horizontal overflow scroll on mobile.
 
 ### Middleware Public Path Rules
+
 The middleware (`lib/supabase/middleware.ts`) bypasses auth redirect for:
+
 1. `/_next/**` — Next.js static chunks
 2. `/fonts/**` — Local font files
 3. `**/favicon**` — Favicon
@@ -263,7 +277,6 @@ The middleware (`lib/supabase/middleware.ts`) bypasses auth redirect for:
 6. `/login`, `/register` — Auth pages (handled separately)
 
 **Do NOT remove item 5** — removing it causes `/api/tmdb/trending` to return an HTML redirect page instead of JSON for unauthenticated visitors, breaking the landing page poster fetch with `SyntaxError: Unexpected token '<'`.
-
 
 ## Database Schema (Supabase)
 
@@ -276,6 +289,7 @@ All tables have Row-Level Security (RLS) enabled with `(SELECT auth.uid())` for 
 - **`server_votes`** — Stream server quality votes (has RLS policies)
 
 ### Indexes
+
 ```sql
 idx_profiles_user_id                     — profiles(user_id)
 idx_watch_history_profile_content        — watch_history(profile_id, content_id, content_type)
@@ -287,27 +301,29 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 
 ## Security Implementation
 
-| Layer | Implementation |
-|---|---|
-| API auth | All 3 sensitive routes check `supabase.auth.getUser()` and return 401 if no session |
-| TMDB proxy allowlist | Only prefixes in `ALLOWED_TMDB_PREFIXES` array are forwarded |
-| Subtitle SSRF | URL validated against `ALLOWED_SUBTITLE_HOSTS` before any server-side fetch |
-| HTTP headers | `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-DNS-Prefetch-Control` |
-| RLS performance | All policies use `(SELECT auth.uid())` not `auth.uid()` — evaluated once per query |
-| Token exposure | Real-Debrid, TMDB, OpenSubtitles, SubDL tokens are server-side only, never in `NEXT_PUBLIC_*` |
-| VidSrc iframe | No `sandbox` attribute — VidSrc anti-adblock returns 404 if sandboxed |
+| Layer                | Implementation                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| API auth             | All 3 sensitive routes check `supabase.auth.getUser()` and return 401 if no session                                                 |
+| TMDB proxy allowlist | Only prefixes in `ALLOWED_TMDB_PREFIXES` array are forwarded                                                                        |
+| Subtitle SSRF        | URL validated against `ALLOWED_SUBTITLE_HOSTS` before any server-side fetch                                                         |
+| HTTP headers         | `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-DNS-Prefetch-Control` |
+| RLS performance      | All policies use `(SELECT auth.uid())` not `auth.uid()` — evaluated once per query                                                  |
+| Token exposure       | Real-Debrid, TMDB, OpenSubtitles, SubDL tokens are server-side only, never in `NEXT_PUBLIC_*`                                       |
+| VidSrc iframe        | No `sandbox` attribute — VidSrc anti-adblock returns 404 if sandboxed                                                               |
 
 ---
 
 ## Code Style & Conventions
 
 ### General
+
 - TypeScript strict mode — **do not disable**
 - Use `@/` path alias for all imports
 - Server Components by default; add `'use client'` only for hooks/interactivity
 - API routes use `NextResponse.json()` for responses
 
 ### i18n — Critical Rules
+
 - **NEVER hardcode Arabic or English strings** — always use `t.*` keys from `useT()`
 - When adding new UI text, add the key to **both** `lib/i18n/ar.ts` AND `lib/i18n/en.ts`
 - Both files must remain in sync (same keys, same structure)
@@ -315,12 +331,14 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 - Use `lang === 'ar'` only for non-text logic (e.g., RTL padding direction)
 
 ### Components
+
 - Use Framer Motion for all animations — import presets from `lib/animations.ts`
 - Use `useT()` for all user-facing text
 - Images use Next.js `<Image>` with `sizes` prop
 - Do not add `will-change: transform` to things that don't animate — only hover/animated elements
 
 ### Styling
+
 - Tailwind CSS v4 — uses `@import "tailwindcss"` (NOT `@tailwind` directives)
 - Design tokens in CSS custom properties in `globals.css`
 - Glassmorphism: `.glass` class
@@ -328,6 +346,7 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 - Primary colors: `#0A0A0A` (bg), `#141414` (cards), `#E50914` (accent red), `#B3B3B3` (secondary text)
 
 ### Mobile Responsiveness Rules
+
 - Use `sm:` prefix for 640px+, `md:` for 768px+
 - **Never use fixed px padding** on full-width sections — always `px-5 md:px-12` or similar
 - **Font sizing pattern:** `text-2xl md:text-5xl` — always define a base mobile size
@@ -338,6 +357,7 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 - **Footer links:** always `flex-wrap justify-center` on mobile
 
 ### API Routes
+
 - TMDB proxy reads `mashhad-lang` cookie OR `?lang=` query param
 - All sensitive routes must call `supabase.auth.getUser()` and return 401 on failure
 - Use `next: { revalidate: N }` for fetch caching (3600s metadata, 300s search)
@@ -362,12 +382,14 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 12. **Landing page x-axis animations** — Do NOT use `initial={{ x: N }}` in landing page feature sections; use `y`-axis only to prevent mobile horizontal overflow
 
 ### Font
+
 - **Thmanyah Sans** — loaded via `next/font/local` in `app/layout.tsx`
 - Weights: 300, 400, 500, 700, 900
 - Files in `public/fonts/thmanyahsans-*.woff2`
 - CSS variable: `--font-thmanyah`
 
 ### Cookie Names
+
 - `mashhad-lang` — Language preference (`ar` | `en`)
 - `active_profile_id` — Active profile UUID
 - Supabase session cookies (managed by `@supabase/ssr`)
@@ -377,6 +399,7 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 ## External API Reference
 
 ### TMDB
+
 - **Base:** `https://api.themoviedb.org/3`
 - **Auth:** `api_key` query parameter (server-side only)
 - **Language:** `ar-SA` for Arabic, `en-US` for English
@@ -384,26 +407,31 @@ idx_ratings_profile_content              — ratings(profile_id, content_id)
 - **Detail:** `/api/tmdb/detail?id=&type=&lang=` — accepts explicit lang override
 
 ### Real-Debrid
+
 - **Base:** `https://api.real-debrid.com/rest/1.0`
 - **Auth:** `Authorization: Bearer <token>` — server-side only, NEVER client-exposed
 - **Flow:** `/torrents/instantAvailability` → `/torrents/addMagnet` → `/torrents/selectFiles` → `/unrestrict/link`
 
 ### Torrentio
+
 - **Base:** `https://torrentio.strem.fun`
 - **Endpoint:** `/stream/{type}/{imdbId}.json` or with `:{season}:{episode}`
 
 ### OpenSubtitles
+
 - **Base:** `https://api.opensubtitles.com/api/v1`
 - **Auth:** `Api-Key` header (server-side only)
 - **Search:** `/subtitles?tmdb_id=X&languages=ar`
 
 ### SubDL
+
 - **Base:** `https://api.subdl.com/api/v1`
 - **Auth:** `api_key` query param (server-side only)
 - **Search:** `/subtitles?api_key=X&tmdb_id=Y&languages=ar`
 - **Download:** Returns ZIP files — decompress with `fflate` (DEFLATE method 8)
 
 ### IntroDB
+
 - **Base:** `https://intro-skipper.b-cdn.net`
 - **Endpoint:** `/api/{type}/{tmdbId}/season/{s}/episode/{e}`
 - **Auth required:** Yes (session check in `/api/segments/route.ts`)

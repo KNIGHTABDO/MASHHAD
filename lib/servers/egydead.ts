@@ -8,6 +8,28 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'ar,en-US;q=0.7,en;q=0.3',
 }
 
+// Proxies fetch through ScraperAPI if the key exists to bypass Vercel datacenter blocks.
+// If it doesn't exist (like in local dev), it falls back to normal fetch.
+async function proxiedFetch(url: string, options: RequestInit = {}) {
+  const apiKey = process.env.SCRAPERAPI_KEY
+  if (!apiKey) {
+    return fetch(url, options)
+  }
+
+  const targetUrl = new URL('http://api.scraperapi.com/')
+  targetUrl.searchParams.append('api_key', apiKey)
+  targetUrl.searchParams.append('url', url)
+  
+  if (options.headers) {
+    targetUrl.searchParams.append('keep_headers', 'true')
+  }
+
+  // NOTE: We do not alter options.method or options.body. 
+  // ScraperAPI intercepts the POST and body natively when sent to their endpoint.
+
+  return fetch(targetUrl.toString(), options)
+}
+
 async function getTMDBInfo(tmdbId: string, type: 'movie' | 'episode'): Promise<{ title: string; year: number } | null> {
   try {
     const endpoint = type === 'movie' ? 'movie' : 'tv'
@@ -38,6 +60,10 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
     const controller = new AbortController()
     const tid = setTimeout(() => controller.abort(), 20000)
     try {
+      // NOTE: We do not use proxiedFetch for embeds. We must use the local residential computer's IP
+      // because the embed servers (like StreamRuby) bind the generated stream token to the IP that 
+      // requested it. If ScraperAPI fetches the embed, the token binds to ScraperAPI's IP, 
+      // causing a CORS/403 block when the browser actually tries to play it.
       const res = await fetch(embedUrl, {
         headers: { ...BROWSER_HEADERS, 'Referer': BASE_URL + '/' },
         signal: controller.signal,
@@ -94,7 +120,7 @@ async function fetchServerList(pageUrl: string): Promise<string> {
   const controller = new AbortController()
   const tid = setTimeout(() => controller.abort(), 20000)
   try {
-    const res = await fetch(pageUrl, {
+    const res = await proxiedFetch(pageUrl, {
       method: 'POST',
       headers: {
         ...BROWSER_HEADERS,
@@ -146,7 +172,7 @@ export const egydeadAdapter: ServerAdapter = {
       const searchTid = setTimeout(() => searchController.abort(), 8000)
       let searchHtml = ''
       try {
-        const res = await fetch(searchUrl, { headers: BROWSER_HEADERS, signal: searchController.signal })
+        const res = await proxiedFetch(searchUrl, { headers: BROWSER_HEADERS, signal: searchController.signal })
         searchHtml = await res.text()
       } finally {
         clearTimeout(searchTid)

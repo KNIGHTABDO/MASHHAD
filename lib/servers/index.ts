@@ -1,6 +1,4 @@
-import type { StreamCandidate, StreamResolveResult, StreamResult, StreamVariant, ServerAdapter } from '@/types/stream'
-import { flattenCandidates, resolveRealDebridCandidates } from './realdebrid'
-import { playimdbAdapter } from './playimdb'
+import type { StreamCandidate, StreamResolveResult, StreamResult, StreamVariant } from '@/types/stream'
 import { egydeadAdapter } from './egydead'
 
 function variantFromStream(stream: StreamResult): StreamVariant {
@@ -68,102 +66,22 @@ export async function resolveStreamGraph(
   episode?: number,
   originalLanguage?: string
 ): Promise<StreamResolveResult> {
-  const PREMIUM_TIMEOUT = 60000 // 60 seconds to allow Egydead to load permanently
-
-  const premiumAdapters: ServerAdapter[] = [playimdbAdapter, egydeadAdapter]
-  const secondaryAdapters: ServerAdapter[] = [] // Removed vidsrc and others as requested
-
+  
   const candidates: StreamCandidate[] = []
 
-  const [rdCandidates, premiumResults] = await Promise.all([
-    Promise.race([
-      resolveRealDebridCandidates(tmdbId, type, season, episode, originalLanguage),
-      new Promise<StreamCandidate[]>((resolve) => setTimeout(() => resolve([]), PREMIUM_TIMEOUT)),
-    ]),
-    Promise.allSettled(
-      premiumAdapters.map(adapter =>
-        Promise.race([
-          adapter.resolve(tmdbId, type, season, episode),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), PREMIUM_TIMEOUT)
-          ),
-        ])
-      )
-    ),
-  ])
-
-  candidates.push(...rdCandidates)
-
-  for (const result of premiumResults) {
-    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-      const start = candidates.length
-      candidates.push(...result.value.map((stream, index) => candidateFromLegacyStream(stream, start + index, originalLanguage)))
+  try {
+    // Only resolve from EgyDead without a timeout. Waiting as long as it takes.
+    const egydeadStreams = await egydeadAdapter.resolve(tmdbId, type, season, episode)
+    if (egydeadStreams && egydeadStreams.length > 0) {
+      candidates.push(...egydeadStreams.map((stream, index) => candidateFromLegacyStream(stream, index, originalLanguage)))
     }
+  } catch (err) {
+    console.error('[Streams] EgyDead strictly isolated resolution failed:', err)
   }
 
-  const remainingWait = candidates.some(s => s.isRealDebrid) ? 2000 : 4000
+  const streams = flattenLegacyCandidates(candidates)
 
-  const secondaryResults = await Promise.allSettled(
-    secondaryAdapters.map(adapter =>
-      Promise.race([
-        adapter.resolve(tmdbId, type, season, episode),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), remainingWait)
-        ),
-      ])
-    )
-  )
-
-  for (const result of secondaryResults) {
-    if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-      const start = candidates.length
-      candidates.push(...result.value.map((stream, index) => candidateFromLegacyStream(stream, start + index, originalLanguage)))
-    }
-  }
-
-  const qualityScore = (q?: string) => {
-    if (!q) return 0
-    if (q.includes('2160') || q.includes('4k')) return 4
-    if (q.includes('1080')) return 3
-    if (q.includes('720')) return 2
-    if (q.includes('480')) return 1
-    return 0
-  }
-
-  candidates.sort((a, b) => {
-    // EgyDead always first (User request)
-    if (a.server === 'egydead' && b.server !== 'egydead') return -1
-    if (a.server !== 'egydead' && b.server === 'egydead') return 1
-
-    // PlayIMDb second
-    if (a.server === 'playimdb' && b.server !== 'playimdb') return -1
-    if (a.server !== 'playimdb' && b.server === 'playimdb') return 1
-
-    // Real-Debrid last (as per user request)
-    if (a.isRealDebrid && !b.isRealDebrid) return 1
-    if (!a.isRealDebrid && b.isRealDebrid) return -1
-
-    if ((a.score || 0) !== (b.score || 0)) return (b.score || 0) - (a.score || 0)
-
-    const scoreA = qualityScore(a.quality)
-    const scoreB = qualityScore(b.quality)
-    if (scoreA !== scoreB) return scoreB - scoreA
-
-    return 0
-  })
-
-  const rankedCandidates = candidates.map((candidate, index) => ({ ...candidate, rank: index + 1 }))
-  
-  // Flatten while preserving the sorted order of candidates
-  const streams = rankedCandidates.flatMap(candidate => {
-    if (candidate.isRealDebrid) {
-      return flattenCandidates([candidate])
-    } else {
-      return flattenLegacyCandidates([candidate])
-    }
-  })
-
-  return { streams, candidates: rankedCandidates }
+  return { streams, candidates }
 }
 
 export async function resolveStreams(
