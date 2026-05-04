@@ -295,7 +295,7 @@ export const egydeadAdapter: ServerAdapter = {
         if (stream) {
           console.log(`[EgyDead] Got ${stream.type} from ${server.name}: ${stream.url.substring(0, 80)}...`)
           const finalUrl = (process.env.OCI_PROXY_URL && process.env.OCI_PROXY_TOKEN)
-            ? `${process.env.OCI_PROXY_URL}?token=${process.env.OCI_PROXY_TOKEN}&url=${encodeURIComponent(stream.url)}`
+            ? `/api/proxy?url=${encodeURIComponent(stream.url)}`
             : stream.url;
 
           return [{
@@ -317,7 +317,7 @@ export const egydeadAdapter: ServerAdapter = {
       if (rawMp4) {
         console.log(`[EgyDead] Found raw mp4 in page HTML: ${rawMp4[0].substring(0, 80)}`)
         const finalUrl = (process.env.OCI_PROXY_URL && process.env.OCI_PROXY_TOKEN)
-          ? `${process.env.OCI_PROXY_URL}?token=${process.env.OCI_PROXY_TOKEN}&url=${encodeURIComponent(rawMp4[0])}`
+          ? `/api/proxy?url=${encodeURIComponent(rawMp4[0])}`
           : rawMp4[0];
 
         return [{
