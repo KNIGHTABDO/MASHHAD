@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const { searchParams, origin } = new URL(req.url);
-  const targetUrl = searchParams.get('url');
+  const url = new URL(req.url);
+  const targetUrl = url.searchParams.get('url');
   
   if (!targetUrl) {
     return new NextResponse('Missing url parameter', { status: 400 });
@@ -18,12 +18,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Forward the request to the OCI Proxy
-    // We pass the browser's User-Agent so the OCI proxy can use it
+    // Correctly extract the Client IP from Vercel headers
+    const forwarded = req.headers.get('x-forwarded-for');
+    const clientIp = forwarded ? forwarded.split(',')[0].trim() : (req.ip || '127.0.0.1');
+    const userAgent = req.headers.get('user-agent') || 'Mozilla/5.0';
+
+    // Forward to OCI Proxy
     const response = await fetch(`${ociProxyUrl}?token=${ociProxyToken}&url=${encodeURIComponent(targetUrl)}`, {
       headers: {
         'X-Proxy-Token': ociProxyToken,
-        'User-Agent': req.headers.get('user-agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'X-Forwarded-For': clientIp,
+        'X-Real-IP': clientIp,
+        'User-Agent': userAgent,
       },
     });
 
@@ -32,19 +38,12 @@ export async function GET(req: NextRequest) {
 
     if (isM3U8) {
       let text = await response.text();
-      
-      // The OCI proxy might have rewritten URLs to http://84.8.217.17/api/proxy...
-      // We need to change those to https://your-domain.vercel.app/api/proxy...
-      // to avoid Mixed Content blocks in the browser.
-      const vercelProxyBase = `${origin}/api/proxy`;
+      const vercelProxyBase = `${url.origin}/api/proxy`;
       const ociProxyBase = ociProxyUrl.split('?')[0];
       
-      // Replace OCI proxy URLs with Vercel proxy URLs
-      // This ensures segments (.ts files) are also fetched via HTTPS through this bridge
-      text = text.replaceAll(ociProxyBase, vercelProxyBase);
-      
-      // Also catch any raw http: links that might have slipped through
-      text = text.replaceAll('http://', 'https://'); 
+      // Swap OCI internal links for Vercel Bridge links
+      // We use a global regex to ensure all occurrences are caught
+      text = text.split(ociProxyBase).join(vercelProxyBase);
 
       return new NextResponse(text, {
         status: response.status,

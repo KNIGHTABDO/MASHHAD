@@ -1,4 +1,5 @@
 import type { ServerAdapter, StreamResult } from '@/types/stream'
+import { headers } from 'next/headers'
 
 const BASE_URL = 'https://tv8.egydead.live'
 
@@ -8,24 +9,32 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'ar,en-US;q=0.7,en;q=0.3',
 }
 
-// Proxies fetch through OCI Proxy or ScraperAPI if keys exist to bypass Vercel datacenter blocks.
-// If neither exists (like in local dev), it falls back to normal fetch.
+// Proxies fetch through OCI Proxy with IP spoofing
 async function proxiedFetch(url: string, options: RequestInit = {}) {
   const ociUrl = process.env.OCI_PROXY_URL
   const ociToken = process.env.OCI_PROXY_TOKEN
-
+  
   if (ociUrl && ociToken) {
     const targetUrl = new URL(ociUrl)
     targetUrl.searchParams.append('url', url)
     
-    const headers = {
+    // Capture user IP to spoof it on OCI
+    const headersList = await headers()
+    const userIp = headersList.get('x-forwarded-for')?.split(',')[0] || '';
+
+    const customHeaders: Record<string, string> = {
       ...(options.headers as Record<string, string>),
       'X-Proxy-Token': ociToken
     }
 
+    if (userIp) {
+      customHeaders['X-Forwarded-For'] = userIp
+      customHeaders['X-Real-IP'] = userIp
+    }
+
     return fetch(targetUrl.toString(), {
       ...options,
-      headers
+      headers: customHeaders
     })
   }
 
@@ -70,16 +79,13 @@ async function getTMDBInfo(tmdbId: string, type: 'movie' | 'episode'): Promise<{
   }
 }
 
-async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
+async function extractStreamFromEmbed(embedUrl: string, userIp?: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
   try {
     const controller = new AbortController()
     const tid = setTimeout(() => controller.abort(), 20000)
     try {
-      // NOTE: We do not use proxiedFetch for embeds. We must use the local residential computer's IP
-      // because the embed servers (like StreamRuby) bind the generated stream token to the IP that 
-      // requested it. If ScraperAPI fetches the embed, the token binds to ScraperAPI's IP, 
-      // causing a CORS/403 block when the browser actually tries to play it.
-      const res = await fetch(embedUrl, {
+      // Use proxiedFetch with userIp to ensure the token binds to the user's home IP
+      const res = await proxiedFetch(embedUrl, {
         headers: { ...BROWSER_HEADERS, 'Referer': BASE_URL + '/' },
         signal: controller.signal,
       })
@@ -100,7 +106,7 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
       const srcMatch = html.match(/\bsrc\s*=\s*["'](https?:\/\/[^"'\s]+\.mp4[^"'\s]*)["']/i)
       if (srcMatch) return { url: srcMatch[1], type: 'mp4' }
 
-      // Dean Edwards packer — format: eval(function(p,a,c,k,e,d){...}('p',a,c,'k'.split
+      // Dean Edwards packer
       const packedMatch = html.match(/eval\(function\(p,a,c,k,e,d\)\{[\s\S]*?\}\('([\s\S]*?)',(\d+),(\d+),'([\s\S]*?)'\.split/)
       if (packedMatch) {
         try {
@@ -111,9 +117,9 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
           while (c--) {
             if (k[c]) p = p.replace(new RegExp('\\b' + c.toString(a) + '\\b', 'g'), k[c])
           }
-          const unpacked = p.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/i)
+          const unpacked = p.match(/https?:\/\/[^\s"']+\.m3u8[^"'\s]*/i)
           if (unpacked) return { url: unpacked[0], type: 'hls' }
-          const mp4 = p.match(/https?:\/\/[^"'\s]+\.mp4[^"'\s]*/i)
+          const mp4 = p.match(/https?:\/\/[^\s"']+\.mp4[^"'\s]*/i)
           if (mp4) return { url: mp4[0], type: 'mp4' }
         } catch { /* continue */ }
       }
@@ -127,10 +133,6 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
   }
 }
 
-
-
-
-// Fetch the page with POST View=1 to reveal the serversList
 async function fetchServerList(pageUrl: string): Promise<string> {
   const controller = new AbortController()
   const tid = setTimeout(() => controller.abort(), 20000)
@@ -153,7 +155,6 @@ async function fetchServerList(pageUrl: string): Promise<string> {
   }
 }
 
-// Parse the <ul class="serversList"> and return data-link values
 function parseServerLinks(html: string): { name: string; url: string }[] {
   const ulMatch = html.match(/<ul class="serversList">([\s\S]*?)<\/ul>/i)
   if (!ulMatch) return []
@@ -183,17 +184,8 @@ export const egydeadAdapter: ServerAdapter = {
       const searchUrl = `${BASE_URL}/?s=${encodeURIComponent(searchQuery)}`
       console.log(`[EgyDead] Searching: ${searchUrl}`)
 
-      const searchController = new AbortController()
-      const searchTid = setTimeout(() => searchController.abort(), 8000)
-      let searchHtml = ''
-      try {
-        const res = await proxiedFetch(searchUrl, { headers: BROWSER_HEADERS, signal: searchController.signal })
-        searchHtml = await res.text()
-      } finally {
-        clearTimeout(searchTid)
-      }
+      const searchHtml = await (await proxiedFetch(searchUrl, { headers: BROWSER_HEADERS })).text()
 
-      // Extract all links from search results
       const links: { href: string; text: string }[] = []
       const linkRegex = /<a\s+[^>]*href="([^"]+egydead[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
       let m
@@ -201,8 +193,6 @@ export const egydeadAdapter: ServerAdapter = {
         const text = m[2].replace(/<[^>]*>/g, '').trim()
         if (text) links.push({ href: m[1], text })
       }
-
-      console.log(`[EgyDead] Found ${links.length} links in search results`)
 
       let targetUrl: string | null = null
       const titleLower = info.title.toLowerCase()
@@ -214,68 +204,22 @@ export const egydeadAdapter: ServerAdapter = {
         }) ?? links.find(l => l.text.toLowerCase().includes(titleLower))
         if (match) targetUrl = match.href
       } else {
-        const eNumStr = String(eNum)
-        const eNumPadded = eNumStr.padStart(2, '0')
-        // Match episode number with optional leading zero, preceded by e, E, -, or /
-        // examples: -4-, -04-, e4, e04, /4/, /04/
         const episodeHrefPattern = new RegExp(`[eE/-]0?${eNum}(?:-|/|$)`, 'i')
-        
         const match = links.find(l => {
           const decodedHref = decodeURIComponent(l.href).toLowerCase()
           if (!decodedHref.includes('/episode/')) return false
           if (episodeHrefPattern.test(decodedHref) && decodedHref.includes(titleLower.replace(/\s+/g, '-'))) return true
           const t = l.text.toLowerCase()
-          const hasTitle = t.includes(titleLower)
-          const hasEpisode = t.includes(`الحلقة ${eNum}`) || t.includes(`الحلقة ${eNumPadded}`) || t.includes(`episode ${eNum}`) || t.includes(`e${eNum}`) || t.includes(`e${eNumPadded}`)
-          return hasTitle && hasEpisode
+          return t.includes(titleLower) && (t.includes(`الحلقة ${eNum}`) || t.includes(`episode ${eNum}`))
         })
-        if (match) {
-          targetUrl = match.href
-        } else {
-          // 2. FALLBACK: If no direct episode link, check for season links to scan the season page
-          console.log('[EgyDead] No direct episode link in search, checking for season page...')
-          const seasonMatch = links.find(l => {
-            const decoded = decodeURIComponent(l.href).toLowerCase()
-            return decoded.includes('/season/') && (decoded.includes(titleLower.replace(/\s+/g, '-')) || l.text.toLowerCase().includes(titleLower))
-          })
-
-          if (seasonMatch) {
-            console.log(`[EgyDead] Fetching season page to find episode: ${seasonMatch.href}`)
-            const seasonHtml = await fetchServerList(seasonMatch.href)
-            const seasonLinks: { href: string; text: string }[] = []
-            const sLinkRegex = /<a\s+[^>]*href="([^"]+egydead[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
-            let sm
-            while ((sm = sLinkRegex.exec(seasonHtml)) !== null) {
-              const text = sm[2].replace(/<[^>]*>/g, '').trim()
-              if (text) seasonLinks.push({ href: sm[1], text })
-            }
-            
-            const epMatch = seasonLinks.find(l => {
-              const decoded = decodeURIComponent(l.href).toLowerCase()
-              if (!decoded.includes('/episode/')) return false
-              return episodeHrefPattern.test(decoded)
-            })
-            if (epMatch) targetUrl = epMatch.href
-          }
-        }
+        if (match) targetUrl = match.href
       }
 
-      if (!targetUrl) {
-        console.log('[EgyDead] No matching page found in search results')
-        return []
-      }
+      if (!targetUrl) return []
 
-      console.log(`[EgyDead] Fetching detail page (POST View=1): ${targetUrl}`)
-
-      // KEY FIX: POST with View=1 to unlock the server list
       const html = await fetchServerList(targetUrl)
       const servers = parseServerLinks(html)
-
-      console.log(`[EgyDead] Found ${servers.length} servers: ${servers.map(s => s.name).join(', ')}`)
-
       if (servers.length === 0) return []
-
-      // Prefer StreamRuby (direct HLS), then any embed that supports m3u8
 
       const PREFERRED = ['streamruby', 'streamhg', 'byse']
       const sorted = [...servers].sort((a, b) => {
@@ -284,18 +228,21 @@ export const egydeadAdapter: ServerAdapter = {
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
       })
 
-      // Try each embed until we get a playable stream (HLS preferred, MP4 fallback)
       const label = type === 'movie'
         ? `${info.title} (${info.year})`
         : `${info.title} S${String(sNum).padStart(2, '0')}E${String(eNum).padStart(2, '0')}`
 
+      // We don't need to pass userIp explicitly because proxiedFetch now gets it from headers()
       for (const server of sorted) {
-        console.log(`[EgyDead] Trying server: ${server.name} (${server.url})`)
+        console.log(`[EgyDead] Trying server: ${server.name}`)
         const stream = await extractStreamFromEmbed(server.url)
         if (stream) {
-          console.log(`[EgyDead] Got ${stream.type} from ${server.name}: ${stream.url.substring(0, 80)}...`)
+          const finalUrl = (process.env.OCI_PROXY_URL && process.env.OCI_PROXY_TOKEN)
+            ? `/api/proxy?url=${encodeURIComponent(stream.url)}`
+            : stream.url;
+
           return [{
-            url: stream.url,
+            url: finalUrl,
             server: 'egydead',
             type: stream.type,
             isRealDebrid: false,
@@ -304,26 +251,8 @@ export const egydeadAdapter: ServerAdapter = {
             fileName: label,
           } as StreamResult]
         }
-        console.log(`[EgyDead] No stream from ${server.name}, trying next...`)
       }
 
-      // Last resort: scan the raw detail page HTML for any direct mp4 links
-      // strictly ensuring it ends with .mp4 (no .html)
-      const rawMp4 = html.match(/https?:\/\/[^\s"']+(?:egydead|forafile|cdn)[^\s"']*\.mp4(?=["'\s?]|$)/i)
-      if (rawMp4) {
-        console.log(`[EgyDead] Found raw mp4 in page HTML: ${rawMp4[0].substring(0, 80)}`)
-        return [{
-          url: rawMp4[0],
-          server: 'egydead',
-          type: 'mp4',
-          isRealDebrid: false,
-          quality: 'auto',
-          label: 'EgyDead (Direct)',
-          fileName: label,
-        } as StreamResult]
-      }
-
-      console.log('[EgyDead] All servers exhausted, no stream found')
       return []
     } catch (err) {
       console.error('[EgyDead]', err)
