@@ -1,10 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+
+interface User {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  isPro: boolean
+  plan: string
+  createdAt: string
+}
 
 export function UserManagement() {
-  const [users, setUsers] = useState<any[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)

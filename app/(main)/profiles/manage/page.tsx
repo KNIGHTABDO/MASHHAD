@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useUser, useAuth } from '@clerk/nextjs'
@@ -39,14 +39,7 @@ function ManageProfileContent() {
   const { user, isLoaded } = useUser()
   const { getToken } = useAuth()
 
-  useEffect(() => {
-    if (editId) {
-      loadProfile(editId)
-      setIsEdit(true)
-    }
-  }, [editId])
-
-  async function loadProfile(id: string) {
+  const loadProfile = useCallback(async (id: string) => {
     const token = await getToken({ template: 'supabase' })
     const supabase = createClient(token || undefined)
     const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
@@ -62,7 +55,14 @@ function ManageProfileContent() {
         subtitle_language: data.subtitle_language,
       })
     }
-  }
+  }, [getToken])
+
+  useEffect(() => {
+    if (editId) {
+      loadProfile(editId)
+      setIsEdit(true)
+    }
+  }, [editId, loadProfile])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()

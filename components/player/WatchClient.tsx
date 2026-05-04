@@ -709,7 +709,6 @@ export function WatchClient({
   const syncProgress = useCallback(
     async (time?: number, embedDuration?: number) => {
       if (!profileId) return;
-      const isEmbed = streams[currentStreamIndex]?.type === "embed";
       const video = videoRef.current;
       // Removed `if (!video && !isEmbed) return` to allow unmount saving!
 
@@ -752,7 +751,7 @@ export function WatchClient({
         await supabase.from("watch_history").insert(row);
       }
     },
-    [profileId, contentId, type, season, episode, streams, currentStreamIndex],
+    [profileId, contentId, type, season, episode, duration, getToken],
   );
 
   useEffect(() => {
@@ -1033,6 +1032,7 @@ export function WatchClient({
     currentStreamIndex,
     currentFileName,
     currentStreamHash,
+    streams,
   ]);
 
   const manualOffsetMs = useRef(0);

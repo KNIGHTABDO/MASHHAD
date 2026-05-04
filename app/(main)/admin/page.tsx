@@ -72,7 +72,7 @@ export default async function AdminDashboardPage() {
                   {recentWatches?.map(watch => (
                     <tr key={watch.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-6 py-4 font-medium">
-                        {(watch.profiles as any)?.name || 'Unknown'}
+                        {(watch.profiles as unknown as { name: string })?.name || 'Unknown'}
                       </td>
                       <td className="px-6 py-4">{watch.content_id}</td>
                       <td className="px-6 py-4">

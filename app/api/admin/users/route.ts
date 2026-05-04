@@ -26,18 +26,22 @@ export async function GET(req: Request) {
       limit: 50,
     })
 
-    const data = users.data.map(u => ({
-      id: u.id,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      email: u.emailAddresses[0]?.emailAddress,
-      isPro: (u.publicMetadata as any)?.isPro === true,
-      plan: (u.publicMetadata as any)?.plan || 'free',
-      createdAt: u.createdAt
-    }))
+    const data = users.data.map(u => {
+      const metadata = u.publicMetadata as { isPro?: boolean; plan?: string }
+      return {
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.emailAddresses[0]?.emailAddress,
+        isPro: metadata?.isPro === true,
+        plan: metadata?.plan || 'free',
+        createdAt: u.createdAt
+      }
+    })
 
     return NextResponse.json({ users: data })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    const error = err as Error
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

@@ -86,11 +86,7 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
   }
 }
 
-// Legacy alias for compatibility
-async function extractM3u8FromEmbed(embedUrl: string): Promise<string | null> {
-  const result = await extractStreamFromEmbed(embedUrl)
-  return result?.url ?? null
-}
+
 
 
 // Fetch the page with POST View=1 to reveal the serversList

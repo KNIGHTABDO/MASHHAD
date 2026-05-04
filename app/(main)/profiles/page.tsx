@@ -32,7 +32,7 @@ export default function ProfilesPage() {
     const { data } = await supabase.from('profiles').select('*').eq('user_id', user.id).order('created_at')
     setProfiles(data || [])
     setLoading(false)
-  }, [isLoaded, user])
+  }, [isLoaded, user, getToken])
 
   useEffect(() => {
     loadProfiles()
