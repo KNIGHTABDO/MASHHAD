@@ -19,10 +19,11 @@ export async function GET(req: NextRequest) {
 
   try {
     // Forward the request to the OCI Proxy
-    // We pass the current origin so the OCI proxy can (optionally) rewrite URLs to point back here
+    // We pass the browser's User-Agent so the OCI proxy can use it
     const response = await fetch(`${ociProxyUrl}?token=${ociProxyToken}&url=${encodeURIComponent(targetUrl)}`, {
       headers: {
         'X-Proxy-Token': ociProxyToken,
+        'User-Agent': req.headers.get('user-agent') || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
     });
 
