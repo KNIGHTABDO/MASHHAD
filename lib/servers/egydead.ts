@@ -36,7 +36,7 @@ async function getTMDBInfo(tmdbId: string, type: 'movie' | 'episode'): Promise<{
 async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
   try {
     const controller = new AbortController()
-    const tid = setTimeout(() => controller.abort(), 10000)
+    const tid = setTimeout(() => controller.abort(), 20000)
     try {
       const res = await fetch(embedUrl, {
         headers: { ...BROWSER_HEADERS, 'Referer': BASE_URL + '/' },
@@ -92,7 +92,7 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
 // Fetch the page with POST View=1 to reveal the serversList
 async function fetchServerList(pageUrl: string): Promise<string> {
   const controller = new AbortController()
-  const tid = setTimeout(() => controller.abort(), 12000)
+  const tid = setTimeout(() => controller.abort(), 20000)
   try {
     const res = await fetch(pageUrl, {
       method: 'POST',

@@ -451,13 +451,13 @@ export function WatchClient({
         // canRead() can throw UnsupportedInputFormatError if the stream isn't recognized
         try {
           if (!(await probeInput.canRead())) {
-            input.dispose();
+            probeInput.dispose();
             audioCodecCache.current.set(url, null);
             return null;
           }
         } catch (probeErr) {
-          console.warn("[WatchClient] Audio probe failed:", probeErr);
-          input.dispose();
+          console.warn("[WatchClient] Audio probe canRead failed:", probeErr);
+          probeInput.dispose();
           audioCodecCache.current.set(url, null);
           return null;
         }
