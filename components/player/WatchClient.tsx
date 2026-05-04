@@ -422,7 +422,8 @@ export function WatchClient({
   const detectAudioCodec = useCallback(
     async (stream: StreamResult): Promise<string | null> => {
       const url = stream?.url;
-      if (!url || stream.type === "embed") return null;
+      console.log(`[WatchClient] Codec probe requested for: ${stream?.server} (RD: ${!!stream?.isRealDebrid})`);
+      if (!url || stream.type === "embed" || !stream.isRealDebrid) return null;
       if (audioCodecCache.current.has(url)) {
         return audioCodecCache.current.get(url) ?? null;
       }
@@ -447,7 +448,15 @@ export function WatchClient({
         const probeInput = new Input({ source: new UrlSource(url), formats });
         input = probeInput;
 
-        if (!(await probeInput.canRead())) {
+        // canRead() can throw UnsupportedInputFormatError if the stream isn't recognized
+        try {
+          if (!(await probeInput.canRead())) {
+            input.dispose();
+            audioCodecCache.current.set(url, null);
+            return null;
+          }
+        } catch (probeErr) {
+          console.warn("[WatchClient] Audio probe failed:", probeErr);
           input.dispose();
           audioCodecCache.current.set(url, null);
           return null;
@@ -562,7 +571,7 @@ export function WatchClient({
     async (stream: StreamResult, force = false): Promise<Ac3StartResult> => {
       const video = videoRef.current;
       if (!video || !stream?.url) return "skip";
-      if (!featureFlags.current.mediabunnyAc3) return "skip";
+      if (!featureFlags.current.mediabunnyAc3 || !stream.isRealDebrid) return "skip";
       if (!force && ac3SessionRef.current && ac3UrlRef.current === stream.url)
         return "started";
 

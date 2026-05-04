@@ -92,7 +92,7 @@ async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; 
 // Fetch the page with POST View=1 to reveal the serversList
 async function fetchServerList(pageUrl: string): Promise<string> {
   const controller = new AbortController()
-  const tid = setTimeout(() => controller.abort(), 10000)
+  const tid = setTimeout(() => controller.abort(), 12000)
   try {
     const res = await fetch(pageUrl, {
       method: 'POST',
@@ -101,6 +101,7 @@ async function fetchServerList(pageUrl: string): Promise<string> {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Origin': BASE_URL,
         'Referer': pageUrl,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       },
       body: 'View=1',
       signal: controller.signal,
@@ -179,21 +180,43 @@ export const egydeadAdapter: ServerAdapter = {
         const episodeHrefPattern = new RegExp(`[eE/-]0?${eNum}(?:-|/|$)`, 'i')
         
         const match = links.find(l => {
-          // Only look at episode-type links
           const decodedHref = decodeURIComponent(l.href).toLowerCase()
           if (!decodedHref.includes('/episode/')) return false
-
-          // 1. Strict match on slug
           if (episodeHrefPattern.test(decodedHref) && decodedHref.includes(titleLower.replace(/\s+/g, '-'))) return true
-
-          // 2. Match title and episode number in text (very reliable)
           const t = l.text.toLowerCase()
           const hasTitle = t.includes(titleLower)
           const hasEpisode = t.includes(`الحلقة ${eNum}`) || t.includes(`الحلقة ${eNumPadded}`) || t.includes(`episode ${eNum}`) || t.includes(`e${eNum}`) || t.includes(`e${eNumPadded}`)
-          
           return hasTitle && hasEpisode
         })
-        if (match) targetUrl = match.href
+        if (match) {
+          targetUrl = match.href
+        } else {
+          // 2. FALLBACK: If no direct episode link, check for season links to scan the season page
+          console.log('[EgyDead] No direct episode link in search, checking for season page...')
+          const seasonMatch = links.find(l => {
+            const decoded = decodeURIComponent(l.href).toLowerCase()
+            return decoded.includes('/season/') && (decoded.includes(titleLower.replace(/\s+/g, '-')) || l.text.toLowerCase().includes(titleLower))
+          })
+
+          if (seasonMatch) {
+            console.log(`[EgyDead] Fetching season page to find episode: ${seasonMatch.href}`)
+            const seasonHtml = await fetchServerList(seasonMatch.href)
+            const seasonLinks: { href: string; text: string }[] = []
+            const sLinkRegex = /<a\s+[^>]*href="([^"]+egydead[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+            let sm
+            while ((sm = sLinkRegex.exec(seasonHtml)) !== null) {
+              const text = sm[2].replace(/<[^>]*>/g, '').trim()
+              if (text) seasonLinks.push({ href: sm[1], text })
+            }
+            
+            const epMatch = seasonLinks.find(l => {
+              const decoded = decodeURIComponent(l.href).toLowerCase()
+              if (!decoded.includes('/episode/')) return false
+              return episodeHrefPattern.test(decoded)
+            })
+            if (epMatch) targetUrl = epMatch.href
+          }
+        }
       }
 
       if (!targetUrl) {
@@ -212,6 +235,7 @@ export const egydeadAdapter: ServerAdapter = {
       if (servers.length === 0) return []
 
       // Prefer StreamRuby (direct HLS), then any embed that supports m3u8
+
       const PREFERRED = ['streamruby', 'streamhg', 'byse']
       const sorted = [...servers].sort((a, b) => {
         const ai = PREFERRED.findIndex(p => a.name.toLowerCase().includes(p))

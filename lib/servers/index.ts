@@ -68,7 +68,7 @@ export async function resolveStreamGraph(
   episode?: number,
   originalLanguage?: string
 ): Promise<StreamResolveResult> {
-  const PREMIUM_TIMEOUT = 8000 // 8s for premium sources
+  const PREMIUM_TIMEOUT = 12000 
 
   const premiumAdapters: ServerAdapter[] = [playimdbAdapter, egydeadAdapter]
   const secondaryAdapters: ServerAdapter[] = [] // Removed vidsrc and others as requested
