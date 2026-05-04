@@ -463,12 +463,20 @@ export function WatchClient({
         }
 
         const preferred = normalizeLanguageCode(stream.selectedAudioLanguage);
-        const audioTrack = preferred
-          ? await probeInput.getPrimaryAudioTrack({
-              sortBy: async (track) =>
-                prefer((await track.getLanguageCode()) === preferred),
-            })
-          : await probeInput.getPrimaryAudioTrack();
+        let audioTrack = null;
+        try {
+          audioTrack = preferred
+            ? await probeInput.getPrimaryAudioTrack({
+                sortBy: async (track) =>
+                  prefer((await track.getLanguageCode()) === preferred),
+              })
+            : await probeInput.getPrimaryAudioTrack();
+        } catch (err) {
+          console.warn("[WatchClient] Audio probe getPrimaryAudioTrack failed:", err);
+          input.dispose();
+          audioCodecCache.current.set(url, null);
+          return null;
+        }
 
         if (!audioTrack) {
           input.dispose();
@@ -604,17 +612,32 @@ export function WatchClient({
           ? HLS_FORMATS
           : ALL_FORMATS;
         const input = new Input({ source: new UrlSource(stream.url), formats });
-        if (!(await input.canRead())) {
+        
+        try {
+          if (!(await input.canRead())) {
+            input.dispose();
+            return "failed";
+          }
+        } catch (err) {
+          console.warn("[Mediabunny][AC3] canRead failed:", err);
           input.dispose();
           return "failed";
         }
+        
         const preferred = normalizeLanguageCode(stream.selectedAudioLanguage);
-        const audioTrack = preferred
-          ? await input.getPrimaryAudioTrack({
-              sortBy: async (track) =>
-                prefer((await track.getLanguageCode()) === preferred),
-            })
-          : await input.getPrimaryAudioTrack();
+        let audioTrack = null;
+        try {
+          audioTrack = preferred
+            ? await input.getPrimaryAudioTrack({
+                sortBy: async (track) =>
+                  prefer((await track.getLanguageCode()) === preferred),
+              })
+            : await input.getPrimaryAudioTrack();
+        } catch (err) {
+          console.warn("[Mediabunny][AC3] getPrimaryAudioTrack failed:", err);
+          input.dispose();
+          return "failed";
+        }
 
         if (!audioTrack || !(await audioTrack.canDecode())) {
           input.dispose();
