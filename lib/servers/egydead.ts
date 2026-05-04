@@ -8,24 +8,39 @@ const BROWSER_HEADERS = {
   'Accept-Language': 'ar,en-US;q=0.7,en;q=0.3',
 }
 
-// Proxies fetch through ScraperAPI if the key exists to bypass Vercel datacenter blocks.
-// If it doesn't exist (like in local dev), it falls back to normal fetch.
+// Proxies fetch through OCI Proxy or ScraperAPI if keys exist to bypass Vercel datacenter blocks.
+// If neither exists (like in local dev), it falls back to normal fetch.
 async function proxiedFetch(url: string, options: RequestInit = {}) {
-  const apiKey = process.env.SCRAPERAPI_KEY
-  if (!apiKey) {
+  const ociUrl = process.env.OCI_PROXY_URL
+  const ociToken = process.env.OCI_PROXY_TOKEN
+
+  if (ociUrl && ociToken) {
+    const targetUrl = new URL(ociUrl)
+    targetUrl.searchParams.append('url', url)
+    
+    const headers = {
+      ...(options.headers as Record<string, string>),
+      'X-Proxy-Token': ociToken
+    }
+
+    return fetch(targetUrl.toString(), {
+      ...options,
+      headers
+    })
+  }
+
+  const scraperKey = process.env.SCRAPERAPI_KEY
+  if (!scraperKey) {
     return fetch(url, options)
   }
 
   const targetUrl = new URL('http://api.scraperapi.com/')
-  targetUrl.searchParams.append('api_key', apiKey)
+  targetUrl.searchParams.append('api_key', scraperKey)
   targetUrl.searchParams.append('url', url)
   
   if (options.headers) {
     targetUrl.searchParams.append('keep_headers', 'true')
   }
-
-  // NOTE: We do not alter options.method or options.body. 
-  // ScraperAPI intercepts the POST and body natively when sent to their endpoint.
 
   return fetch(targetUrl.toString(), options)
 }
