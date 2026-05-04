@@ -19,8 +19,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Correctly extract the Client IP from Vercel headers
-    const forwarded = req.headers.get('x-forwarded-for');
-    const clientIp = forwarded ? forwarded.split(',')[0].trim() : (req.ip || '127.0.0.1');
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0] || req.headers.get('x-real-ip') || '127.0.0.1';
     const userAgent = req.headers.get('user-agent') || 'Mozilla/5.0';
 
     // Forward to OCI Proxy
@@ -39,11 +38,12 @@ export async function GET(req: NextRequest) {
     if (isM3U8) {
       let text = await response.text();
       const vercelProxyBase = `${url.origin}/api/proxy`;
-      const ociProxyBase = ociProxyUrl.split('?')[0];
       
-      // Swap OCI internal links for Vercel Bridge links
-      // We use a global regex to ensure all occurrences are caught
-      text = text.split(ociProxyBase).join(vercelProxyBase);
+      // Aggressively replace any OCI IP variations to force them through our bridge
+      // This catches both http://84.8.217.17/proxy and http://84.8.217.17/api/proxy
+      text = text.split('http://84.8.217.17/api/proxy').join(vercelProxyBase);
+      text = text.split('http://84.8.217.17/proxy').join(vercelProxyBase);
+      text = text.split('http://84.8.217.17').join(url.origin); // Catch-all for any other raw OCI links
 
       return new NextResponse(text, {
         status: response.status,
