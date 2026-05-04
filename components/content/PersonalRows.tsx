@@ -194,7 +194,7 @@ export function MyListRow() {
                 const detailUrl = `/${type === 'tv' ? 'series' : 'movie'}/${item.id}`
 
                 return (
-                  <Link key={item.id} href={detailUrl} className="w-36 flex-shrink-0 group">
+                  <Link key={`${type}-${item.id}`} href={detailUrl} className="w-36 flex-shrink-0 group">
                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-[#141414]">
                       <Image
                         src={getTMDBImageUrl(item.poster_path, 'w500')}

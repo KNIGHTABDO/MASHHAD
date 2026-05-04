@@ -172,20 +172,26 @@ export const egydeadAdapter: ServerAdapter = {
         }) ?? links.find(l => l.text.toLowerCase().includes(titleLower))
         if (match) targetUrl = match.href
       } else {
-        const sxxexx = `S${String(sNum).padStart(2, '0')}E${String(eNum).padStart(2, '0')}`
-        // Use URL slug matching — slug has clear numeric boundaries (e.g. -الحلقة-1- vs -الحلقة-11-)
-        // This prevents false positives where "الحلقة 1" is found inside "الحلقة 11"
-        const episodeHrefPattern = new RegExp(`-${eNum}(?:-|/)`, 'i')
+        const eNumStr = String(eNum)
+        const eNumPadded = eNumStr.padStart(2, '0')
+        // Match episode number with optional leading zero, preceded by e, E, -, or /
+        // examples: -4-, -04-, e4, e04, /4/, /04/
+        const episodeHrefPattern = new RegExp(`[eE/-]0?${eNum}(?:-|/|$)`, 'i')
         
         const match = links.find(l => {
           // Only look at episode-type links
           const decodedHref = decodeURIComponent(l.href).toLowerCase()
           if (!decodedHref.includes('/episode/')) return false
-          // Match slug boundary: episode number surrounded by hyphens or at end
-          if (episodeHrefPattern.test(decodedHref)) return true
-          // Fallback: S01E01 style in text
+
+          // 1. Strict match on slug
+          if (episodeHrefPattern.test(decodedHref) && decodedHref.includes(titleLower.replace(/\s+/g, '-'))) return true
+
+          // 2. Match title and episode number in text (very reliable)
           const t = l.text.toLowerCase()
-          return t.includes(titleLower) && t.includes(sxxexx.toLowerCase())
+          const hasTitle = t.includes(titleLower)
+          const hasEpisode = t.includes(`الحلقة ${eNum}`) || t.includes(`الحلقة ${eNumPadded}`) || t.includes(`episode ${eNum}`) || t.includes(`e${eNum}`) || t.includes(`e${eNumPadded}`)
+          
+          return hasTitle && hasEpisode
         })
         if (match) targetUrl = match.href
       }
