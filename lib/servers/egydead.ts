@@ -294,8 +294,12 @@ export const egydeadAdapter: ServerAdapter = {
         const stream = await extractStreamFromEmbed(server.url)
         if (stream) {
           console.log(`[EgyDead] Got ${stream.type} from ${server.name}: ${stream.url.substring(0, 80)}...`)
+          const finalUrl = (process.env.OCI_PROXY_URL && process.env.OCI_PROXY_TOKEN)
+            ? `${process.env.OCI_PROXY_URL}?token=${process.env.OCI_PROXY_TOKEN}&url=${encodeURIComponent(stream.url)}`
+            : stream.url;
+
           return [{
-            url: stream.url,
+            url: finalUrl,
             server: 'egydead',
             type: stream.type,
             isRealDebrid: false,
@@ -312,8 +316,12 @@ export const egydeadAdapter: ServerAdapter = {
       const rawMp4 = html.match(/https?:\/\/[^\s"']+(?:egydead|forafile|cdn)[^\s"']*\.mp4(?=["'\s?]|$)/i)
       if (rawMp4) {
         console.log(`[EgyDead] Found raw mp4 in page HTML: ${rawMp4[0].substring(0, 80)}`)
+        const finalUrl = (process.env.OCI_PROXY_URL && process.env.OCI_PROXY_TOKEN)
+          ? `${process.env.OCI_PROXY_URL}?token=${process.env.OCI_PROXY_TOKEN}&url=${encodeURIComponent(rawMp4[0])}`
+          : rawMp4[0];
+
         return [{
-          url: rawMp4[0],
+          url: finalUrl,
           server: 'egydead',
           type: 'mp4',
           isRealDebrid: false,
