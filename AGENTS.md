@@ -21,7 +21,7 @@ Mashhad is a full-stack Arabic streaming platform that aggregates content from m
 
 ```bash
 # Install dependencies
-npm install
+npm ci
 
 # Start development server (http://localhost:3000)
 npm run dev
@@ -34,38 +34,61 @@ npm start
 
 # Lint
 npm run lint
+
+# Typecheck
+npm run typecheck
+
+# Unit tests
+npm run test
+
+# E2E tests
+npm run test:e2e
 ```
 
 ---
 
 ## Environment Variables
 
-All required in `.env.local` (NEVER commit this file):
+Create `.env.local` from `.env.example` (NEVER commit `.env.local`):
 
 ```env
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
 # Clerk Auth (required)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-pub-key>
 CLERK_SECRET_KEY=<clerk-secret-key>
+CLERK_WEBHOOK_SECRET=<clerk-webhook-secret>
 
 # Supabase (required - JWT template mapped from Clerk)
 NEXT_PUBLIC_SUPABASE_URL=<supabase-project-url>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 
 # TMDB (required — metadata, search, discover)
 TMDB_API_KEY=<tmdb-api-key>
 
 # Real-Debrid (required — stream resolution)
 REALDEBRID_API_TOKEN=<real-debrid-api-token>
+RD_API_TOKEN=<optional-alias>
 
 # Subtitles (required for full subtitle coverage)
 OPENSUBTITLES_API_KEY=<opensubtitles-rest-api-key>
 SUBDL_API_KEY=<subdl-api-key>
 
-# ScraperAPI (required for bypassing Cloudflare on Vercel)
+# Scraping/Proxy (optional)
 SCRAPERAPI_KEY=<scraperapi-key>
+OCI_PROXY_URL=<oci-proxy-url>
+OCI_PROXY_TOKEN=<oci-proxy-token>
 
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Payments (optional)
+STRIPE_SECRET_KEY=<stripe-secret-key>
+STRIPE_WEBHOOK_SECRET=<stripe-webhook-secret>
+
+# Experimental flags (optional)
+NEXT_PUBLIC_EXPERIMENTAL_HEVCJS=0
+NEXT_PUBLIC_EXPERIMENTAL_MEDIABUNNY_AC3=0
+
 ```
 
 ---
@@ -119,14 +142,19 @@ mashhad/
 │       ├── tmdb/
 │       │   ├── [...path]/route.ts      # TMDB proxy — auth guard + path allowlist + lang-aware
 │       │   └── detail/route.ts         # Single item detail — accepts ?lang= query param
-│       ├── stream/resolve/route.ts     # Stream resolution engine
-│       ├── realdebrid/
-│       │   └── resolve/route.ts        # Real-Debrid torrent → stream URL
+│       ├── stream/
+│       │   ├── resolve/route.ts        # Multi-source stream resolver
+│       │   ├── refresh/route.ts        # Refresh/retry stream URLs
+│       │   └── events/route.ts         # Stream telemetry/events
 │       ├── subtitles/
 │       │   └── search/route.ts         # Multi-source subtitle search — auth guard + SSRF fix
 │       ├── segments/route.ts           # IntroDB intro/outro timestamps — auth guard
 │       ├── continue-watching/route.ts  # Watch progress API
-│       └── watchlist/route.ts          # User saved list API
+│       ├── watchlist/route.ts          # User saved list API
+│       ├── webhooks/
+│       │   ├── clerk/route.ts          # Clerk webhooks (create default profile)
+│       │   └── stripe/route.ts         # Stripe webhooks (upgrade plan)
+│       └── health/route.ts             # Health endpoint (used by smoke tests)
 ├── components/
 │   ├── Providers.tsx                   # QueryClient + LanguageProvider + SplashScreen
 │   ├── content/
@@ -155,8 +183,10 @@ mashhad/
 │   ├── servers/
 │   │   ├── index.ts                    # Parallel orchestrator (8s timeout, auto-fallback)
 │   │   ├── realdebrid.ts              # Torrentio → RD → MKV/HLS + fileName propagation
+│   │   ├── egydead.ts                 # EgyDead host extraction (optional proxy/scraper support)
 │   │   ├── vidsrc.ts
 │   │   ├── fasselhd.ts
+│   │   ├── playimdb.ts
 │   │   └── vidbom.ts
 │   ├── subtitles/                      # SRT/ASS/VTT converters, encoding detection
 │   ├── supabase/

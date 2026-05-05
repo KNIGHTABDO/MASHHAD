@@ -1,14 +1,15 @@
-import { egydeadAdapter } from '../lib/servers/egydead.ts';
 import fs from 'fs';
 
-const SCRAPERAPI_KEY = "44c4b8da48f32288226081a986cd844c";
-process.env.SCRAPERAPI_KEY = SCRAPERAPI_KEY;
+const scraperKey = process.env.SCRAPERAPI_KEY;
+if (!scraperKey) {
+  throw new Error('SCRAPERAPI_KEY is required');
+}
 
 const url = "https://stmruby.com/embed-dbxul7sofaja.html";
 
 async function proxiedFetch(url) {
   const targetUrl = new URL('http://api.scraperapi.com/');
-  targetUrl.searchParams.append('api_key', process.env.SCRAPERAPI_KEY);
+  targetUrl.searchParams.append('api_key', scraperKey);
   targetUrl.searchParams.append('url', url);
   return fetch(targetUrl.toString());
 }

@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a problem with Mashhad
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue. Please include enough detail for us to reproduce the problem.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Where does this happen?
+      placeholder: "local dev / Vercel / specific browser / device"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include expected vs actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Be as specific as possible.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste logs (redact tokens) or add screenshots.
+    validations:
+      required: false

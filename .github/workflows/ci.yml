@@ -20,4 +20,8 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
       - run: npm run build
+      - run: npx playwright install --with-deps
+      - run: npm run test:e2e

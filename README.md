@@ -11,6 +11,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_+_RLS-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?logo=vercel&logoColor=white)](https://mashhad-web.vercel.app)
+[![CI](https://github.com/KNIGHTABDO/MASHHAD/actions/workflows/ci.yml/badge.svg)](https://github.com/KNIGHTABDO/MASHHAD/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-E50914)](LICENSE)
 
 **[🌐 Live Demo](https://mashhad-web.vercel.app)** &nbsp;·&nbsp; **[📁 Repository](https://github.com/KNIGHTABDO/MASHHAD)** &nbsp;·&nbsp; **[🐛 Report Bug](https://github.com/KNIGHTABDO/MASHHAD/issues)**
@@ -155,29 +156,45 @@ npm install
 
 ### Environment Variables
 
-Create `.env.local` in the project root:
+Copy `.env.example` to `.env.local` and fill in values:
 
 ```env
+# App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
 # Clerk Auth (required)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_pub_key
 CLERK_SECRET_KEY=your_clerk_secret_key
+CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
 
 # Supabase (required - JWT template mapped from Clerk)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # TMDB (required — metadata, search, discover)
 TMDB_API_KEY=your_tmdb_api_key
 
 # Real-Debrid (required for stream resolution)
 REALDEBRID_API_TOKEN=your_realdebrid_token
+RD_API_TOKEN=optional_alias_for_realdebrid_token
 
 # Subtitles (required for full subtitle coverage)
 OPENSUBTITLES_API_KEY=your_opensubtitles_rest_api_key
 SUBDL_API_KEY=your_subdl_api_key
 
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Scraping/Proxy (optional, improves EgyDead reliability in some deployments)
+SCRAPERAPI_KEY=your_scraperapi_key
+OCI_PROXY_URL=your_oci_proxy_url
+OCI_PROXY_TOKEN=your_oci_proxy_token
+
+# Payments (optional, used for Mashhad Pro)
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+
+# Experimental flags (optional)
+NEXT_PUBLIC_EXPERIMENTAL_HEVCJS=0
+NEXT_PUBLIC_EXPERIMENTAL_MEDIABUNNY_AC3=0
 ```
 
 ### Run
@@ -187,6 +204,9 @@ npm run dev      # Development — http://localhost:3000
 npm run build    # Production build
 npm start        # Production server
 npm run lint     # Lint
+npm run typecheck
+npm run test     # Unit tests (Vitest)
+npm run test:e2e # E2E smoke tests (Playwright)
 ```
 
 ---
@@ -223,14 +243,19 @@ mashhad/
 │       ├── tmdb/
 │       │   ├── [...path]/route.ts      # TMDB proxy — auth guard + path allowlist + lang-aware
 │       │   └── detail/route.ts         # Single item detail — accepts ?lang= query param
-│       ├── stream/resolve/route.ts     # Stream resolution engine (parallel adapters)
-│       ├── realdebrid/
-│       │   └── resolve/route.ts        # Real-Debrid torrent → stream URL
+│       ├── stream/
+│       │   ├── resolve/route.ts        # Multi-source stream resolver (parallel adapters)
+│       │   ├── refresh/route.ts        # Refresh/retry stream tokenized URLs
+│       │   └── events/route.ts         # Stream telemetry/events
 │       ├── subtitles/
 │       │   └── search/route.ts         # Multi-source subtitle search — auth guard + SSRF fix
 │       ├── segments/route.ts           # IntroDB intro/outro timestamps — auth guard
 │       ├── continue-watching/route.ts  # Watch progress API
-│       └── watchlist/route.ts          # User saved list API
+│       ├── watchlist/route.ts          # User saved list API
+│       ├── webhooks/
+│       │   ├── clerk/route.ts          # Clerk webhooks (create default profile)
+│       │   └── stripe/route.ts         # Stripe webhooks (upgrade plan)
+│       └── health/route.ts             # Health endpoint (used by smoke tests)
 ├── components/
 │   ├── Providers.tsx                   # QueryClient + LanguageProvider + SplashScreen
 │   ├── content/
@@ -259,8 +284,10 @@ mashhad/
 │   ├── servers/
 │   │   ├── index.ts                    # Parallel orchestrator (8s timeout, auto-fallback)
 │   │   ├── realdebrid.ts               # Torrentio → RD → MKV/HLS + fileName propagation
+│   │   ├── egydead.ts                  # EgyDead host extraction (optional proxy/scraper support)
 │   │   ├── vidsrc.ts
 │   │   ├── fasselhd.ts
+│   │   ├── playimdb.ts
 │   │   └── vidbom.ts
 │   ├── subtitles/                      # SRT/ASS/VTT converters, encoding detection
 │   ├── supabase/
@@ -365,6 +392,20 @@ All tables have Row-Level Security with `(SELECT auth.uid())` for optimal query 
 ## 📜 License
 
 MIT License — See [LICENSE](LICENSE) for details.
+
+---
+
+## 🤝 Contributing
+
+- Start here: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Community rules: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security reports: [SECURITY.md](SECURITY.md)
+
+---
+
+## 🗒 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

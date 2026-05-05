@@ -79,7 +79,7 @@ async function getTMDBInfo(tmdbId: string, type: 'movie' | 'episode'): Promise<{
   }
 }
 
-async function extractStreamFromEmbed(embedUrl: string, userIp?: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
+async function extractStreamFromEmbed(embedUrl: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
   try {
     const controller = new AbortController()
     const tid = setTimeout(() => controller.abort(), 20000)

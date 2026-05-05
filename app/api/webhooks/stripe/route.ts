@@ -3,14 +3,14 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { clerkClient } from '@clerk/nextjs/server'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  apiVersion: '2025-02-24.acacia' as any,
-})
-
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
-
 export async function POST(req: Request) {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!stripeSecretKey || !webhookSecret) {
+    return NextResponse.json({ error: 'Missing Stripe configuration' }, { status: 500 })
+  }
+
+  const stripe = new Stripe(stripeSecretKey)
   const body = await req.text()
   const sig = (await headers()).get('stripe-signature') as string
 
@@ -29,13 +29,6 @@ export async function POST(req: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.client_reference_id
-
-    console.log(`[Stripe Webhook] Session Info:`, {
-      id: session.id,
-      userId: userId,
-      paymentStatus: session.payment_status,
-      customerEmail: session.customer_details?.email
-    })
 
     if (!userId) {
       console.error(`[Stripe Webhook] CRITICAL: No client_reference_id found in session. Cannot upgrade user.`)

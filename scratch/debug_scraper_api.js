@@ -1,4 +1,5 @@
-const apiKey = "44c4b8da48f32288226081a986cd844c";
+const apiKey = process.env.SCRAPERAPI_KEY;
+if (!apiKey) throw new Error("SCRAPERAPI_KEY is required");
 const url = "https://tv8.egydead.live/?s=We%20Are%20All%20Trying%20Here";
 
 const targetUrl = new URL('http://api.scraperapi.com/');
