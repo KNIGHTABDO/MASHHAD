@@ -1,0 +1,10 @@
+{
+  "release-type": "node",
+  "packages": {
+    ".": {
+      "package-name": "mashhad-app",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false
+    }
+  }
+}

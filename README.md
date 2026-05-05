@@ -409,6 +409,13 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 🚢 Releases
+
+- Releases are automated with Release Please on `main`.
+- Merging the Release Please PR will tag a new version and publish GitHub release notes.
+
+---
+
 <div align="center">
 
 Made with ❤️ for the Arabic-speaking world
