@@ -17,7 +17,7 @@
   "dependencies": {
     "@clerk/nextjs": "^7.3.0",
     "@hevcjs/dashjs-plugin": "^1.0.2",
-    "@mediabunny/ac3": "^1.43.0",
+    "@mediabunny/ac3": "^1.44.2",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@supabase/ssr": "^0.10.2",
