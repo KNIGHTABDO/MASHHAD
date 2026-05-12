@@ -22,7 +22,7 @@
     "@react-three/fiber": "^9.6.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.1",
-    "@tanstack/react-query": "^5.100.5",
+    "@tanstack/react-query": "^5.100.10",
     "@tanstack/react-virtual": "^3.13.24",
     "@types/three": "^0.184.0",
     "@vidstack/react": "^1.12.13",
